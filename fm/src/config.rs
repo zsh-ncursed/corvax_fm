@@ -1,12 +1,13 @@
 use serde::{Deserialize, Serialize};
-use ratatui::style::Color;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Config {
     pub colors: Colors,
+    #[serde(default)]
+    pub pinned_dirs: Vec<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Colors {
     pub bg: String,
     pub fg: String,
@@ -23,19 +24,9 @@ impl Default for Config {
                 highlight_bg: "#0000ff".to_string(),
                 highlight_fg: "#ffff00".to_string(),
             },
+            pinned_dirs: Vec::new(),
         }
     }
-}
-
-pub fn hex_to_color(hex: &str) -> Color {
-    let hex = hex.trim_start_matches('#');
-    if hex.len() != 6 {
-        return Color::Reset;
-    }
-    let r = u8::from_str_radix(&hex[0..2], 16).unwrap_or(0);
-    let g = u8::from_str_radix(&hex[2..4], 16).unwrap_or(0);
-    let b = u8::from_str_radix(&hex[4..6], 16).unwrap_or(0);
-    Color::Rgb(r, g, b)
 }
 
 pub fn load_config() -> Config {
@@ -44,4 +35,13 @@ pub fn load_config() -> Config {
         .and_then(|config_path| std::fs::File::open(config_path).ok())
         .and_then(|f| serde_yaml::from_reader(f).ok())
         .unwrap_or_default()
+}
+
+pub fn save_config(config: &Config) -> std::io::Result<()> {
+    let config_path = dirs::config_dir().unwrap().join("fm/config.yml");
+    if let Some(parent) = config_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let f = std::fs::File::create(config_path)?;
+    serde_yaml::to_writer(f, config).map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
 }
