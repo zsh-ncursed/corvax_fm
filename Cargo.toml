@@ -1,0 +1,30 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/app",
+    "crates/rtfm-core",
+    "crates/ui",
+    "crates/io",
+    "crates/config",
+    "crates/utils", "crates/plugin-ipc",
+]
+
+[workspace.dependencies]
+tokio = { version = "1", features = ["full"] }
+ratatui = { version = "0.26.1", features = ["all-widgets"] }
+crossterm = "0.27.0"
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
+log = "0.4"
+fern = "0.6"
+directories = "5.0"
+portable-pty = "0.11.0"
+ptyprocess = "0.4.0"
+tempdir = "0.3.7"
+proptest = "1.5.0"
+assert_cmd = "2.0.14"
+tokio-test = "0.4.4"
+infer = "0.16.0"
+uuid = { version = "1.8.0", features = ["v4"] }
+proc-mounts = "0.3.0"
+serde_json = "1.0"
