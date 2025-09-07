@@ -1,0 +1,16 @@
+[package]
+name = "app"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rtfm-core = { path = "../rtfm-core", features = ["mounts"] }
+ui = { path = "../ui", features = ["mounts"] }
+io = { path = "../io" }
+config = { path = "../config" }
+utils = { path = "../utils" }
+
+tokio = { workspace = true }
+log = { workspace = true }
+fern = { workspace = true }
+directories = { workspace = true }

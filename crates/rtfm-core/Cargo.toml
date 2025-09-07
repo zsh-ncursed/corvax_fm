@@ -1,0 +1,21 @@
+[package]
+name = "rtfm-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { workspace = true }
+log = { workspace = true }
+uuid = { workspace = true }
+io = { path = "../io" }
+directories = { workspace = true }
+config = { path = "../config" }
+proc-mounts = { workspace = true, optional = true }
+plugin-ipc = { path = "../plugin-ipc" }
+
+[dev-dependencies]
+tempdir = { workspace = true }
+tokio = { workspace = true }
+
+[features]
+mounts = ["dep:proc-mounts"]
