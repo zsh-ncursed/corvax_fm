@@ -8,55 +8,69 @@ use rtfm_core::preview::PreviewState;
 use crate::left_pane;
 
 pub fn render_main_layout(frame: &mut Frame, app_state: &AppState) {
-    // The spec defines a top bar for tabs
+    // Create a layout for the tab bar, main content area, and footer.
     let main_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(1), // Tabs
+            Constraint::Length(2), // For tabs
             Constraint::Min(0),    // Main content
             Constraint::Length(6), // Footer
         ])
         .split(frame.size());
 
-    let top_bar = main_chunks[0];
+    let top_bar_area = main_chunks[0];
     let main_area = main_chunks[1];
-    let footer = main_chunks[2];
+    let footer_area = main_chunks[2];
 
-    // --- Top Bar (Tabs) ---
-    render_tabs(frame, top_bar, app_state);
+    // --- Render Tab Bar ---
+    render_tabs(frame, top_bar_area, app_state);
 
-    // --- Main Area (Left, Middle, Right) ---
+    // --- Create Main Panes ---
     let main_horizontal_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Percentage(20), // Left
-            Constraint::Percentage(80), // Middle + Right
+            Constraint::Percentage(20), // Left Pane
+            Constraint::Percentage(80), // Middle + Right Pane
         ])
         .split(main_area);
 
-    let left_pane = main_horizontal_chunks[0];
+    let left_pane_area = main_horizontal_chunks[0];
     let middle_right_area = main_horizontal_chunks[1];
 
     let middle_right_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Percentage(55), // Middle
-            Constraint::Percentage(45), // Right
+            Constraint::Percentage(55), // Middle Pane
+            Constraint::Percentage(45), // Right Pane
         ])
         .split(middle_right_area);
 
-    let middle_pane = middle_right_chunks[0];
-    let right_pane = middle_right_chunks[1];
+    let middle_pane_area = middle_right_chunks[0];
+    let right_pane_area = middle_right_chunks[1];
 
-    // Render left pane with its vertical blocks
-    render_left_pane(frame, left_pane, app_state);
-
-    // Render middle pane using the active tab's state
+    // --- Render Panes with Borders ---
     let active_tab = app_state.get_active_tab();
-    render_middle_pane(frame, middle_pane, active_tab);
 
-    // Render right pane
-    render_right_pane(frame, right_pane, active_tab);
+    // Left Pane
+    let left_pane_block = Block::default().borders(Borders::ALL);
+    let left_pane_inner_area = left_pane_block.inner(left_pane_area);
+    frame.render_widget(left_pane_block, left_pane_area);
+    render_left_pane(frame, left_pane_inner_area, app_state);
+
+    // Middle Pane
+    let middle_pane_block = Block::default()
+        .title(format!("Current: {}", active_tab.current_dir.display()))
+        .borders(Borders::ALL);
+    let middle_pane_inner_area = middle_pane_block.inner(middle_pane_area);
+    frame.render_widget(middle_pane_block, middle_pane_area);
+    render_middle_pane(frame, middle_pane_inner_area, active_tab);
+
+    // Right Pane
+    let right_pane_block = Block::default().title("Preview").borders(Borders::ALL);
+    let right_pane_inner_area = right_pane_block.inner(right_pane_area);
+    frame.render_widget(right_pane_block, right_pane_area);
+    render_right_pane(frame, right_pane_inner_area, active_tab);
+
 
     // --- Footer (Terminal, Info) ---
     if app_state.show_terminal {
@@ -66,16 +80,15 @@ pub fn render_main_layout(frame: &mut Frame, app_state: &AppState) {
                 Constraint::Percentage(50), // Terminal
                 Constraint::Percentage(50), // Info
             ])
-            .split(footer);
-
-        frame.render_widget(
-            Block::new().borders(Borders::ALL).title("Terminal"),
-            footer_chunks[0],
-        );
+            .split(footer_area);
+        // Terminal block
+        let terminal_block = Block::new().borders(Borders::ALL).title("Terminal");
+        frame.render_widget(terminal_block, footer_chunks[0]);
+        // Info block
         render_info_footer(frame, footer_chunks[1], app_state);
     } else {
         // If terminal is hidden, info pane takes the whole footer
-        render_info_footer(frame, footer, app_state);
+        render_info_footer(frame, footer_area, app_state);
     }
 }
 
@@ -100,7 +113,7 @@ fn render_tabs(frame: &mut Frame, area: Rect, app_state: &AppState) {
         .iter()
         .map(|tab| {
             format!(
-                "{} {}",
+                "Tab {} - {}",
                 tab.id + 1,
                 tab.current_dir.file_name().unwrap_or_default().to_string_lossy()
             )
@@ -108,7 +121,7 @@ fn render_tabs(frame: &mut Frame, area: Rect, app_state: &AppState) {
         .collect();
 
     let tabs = Tabs::new(titles)
-        .block(Block::default().borders(Borders::BOTTOM))
+        .block(Block::default().borders(Borders::ALL))
         .select(app_state.active_tab_index)
         .style(Style::default().fg(Color::White))
         .highlight_style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD));
@@ -121,7 +134,12 @@ fn render_middle_pane(frame: &mut Frame, area: Rect, tab_state: &TabState) {
         .entries
         .iter()
         .map(|entry| {
-            let mut name = entry.name.clone();
+            let icon = if entry.is_dir {
+                "" // Folder icon
+            } else {
+                "" // File icon
+            };
+            let mut name = format!("{} {}", icon, entry.name.clone());
             if entry.is_dir {
                 name.push('/');
             }
@@ -129,10 +147,8 @@ fn render_middle_pane(frame: &mut Frame, area: Rect, tab_state: &TabState) {
         })
         .collect();
 
-    let list_title = format!("Current: {}", tab_state.current_dir.display());
     let list = List::new(items)
-        .block(Block::default().borders(Borders::ALL).title(list_title))
-        .highlight_symbol(">> ");
+        .highlight_style(Style::default().bg(Color::Blue));
 
     let mut list_state = ListState::default();
     list_state.select(Some(tab_state.cursor));
@@ -141,29 +157,49 @@ fn render_middle_pane(frame: &mut Frame, area: Rect, tab_state: &TabState) {
 }
 
 fn render_info_footer(frame: &mut Frame, area: Rect, app_state: &AppState) {
+    let block = Block::default().borders(Borders::ALL).title("Tasks");
+    let inner_area = block.inner(area);
+    frame.render_widget(block, area);
+
     let tasks = app_state.task_manager.get_tasks();
     let task_items: Vec<ListItem> = tasks
         .iter()
         .map(|task| ListItem::new(task.description.clone()))
         .collect();
 
-    let task_list = List::new(task_items)
-        .block(Block::default().borders(Borders::ALL).title("Tasks"));
+    let task_list = List::new(task_items);
 
-    frame.render_widget(task_list, area);
+    frame.render_widget(task_list, inner_area);
 }
 
 fn render_right_pane(frame: &mut Frame, area: Rect, tab_state: &TabState) {
     let preview_state = tab_state.preview_state.lock().unwrap();
-    let content = match &*preview_state {
-        PreviewState::Empty => "Empty",
-        PreviewState::Loading => "Loading...",
-        PreviewState::Text(text) => text,
-        PreviewState::Error(e) => e,
-    };
-
-    let block = Block::default().borders(Borders::ALL).title("Preview");
-    let paragraph = Paragraph::new(content).block(block);
-
-    frame.render_widget(paragraph, area);
+    match &*preview_state {
+        PreviewState::Directory(entries) => {
+            let items: Vec<ListItem> = entries
+                .iter()
+                .map(|entry| {
+                    let icon = if entry.is_dir { "" } else { "" };
+                    let mut name = format!("{} {}", icon, entry.name.clone());
+                    if entry.is_dir {
+                        name.push('/');
+                    }
+                    ListItem::new(name)
+                })
+                .collect();
+            let list = List::new(items);
+            frame.render_widget(list, area);
+        }
+        _ => {
+            let content = match &*preview_state {
+                PreviewState::Empty => "Empty",
+                PreviewState::Loading => "Loading...",
+                PreviewState::Text(text) => text,
+                PreviewState::Error(e) => e,
+                PreviewState::Directory(_) => unreachable!(), // Should be handled above
+            };
+            let paragraph = Paragraph::new(content);
+            frame.render_widget(paragraph, area);
+        }
+    }
 }
