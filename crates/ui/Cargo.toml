@@ -7,6 +7,7 @@ edition = "2021"
 ratatui = { workspace = true }
 crossterm = { workspace = true }
 rtfm-core = { path = "../rtfm-core" }
+log = { workspace = true }
 
 [features]
 mounts = []

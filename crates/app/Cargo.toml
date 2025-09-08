@@ -13,4 +13,5 @@ utils = { path = "../utils" }
 tokio = { workspace = true }
 log = { workspace = true }
 fern = { workspace = true }
+chrono = { version = "0.4", features = ["serde"] }
 directories = { workspace = true }
