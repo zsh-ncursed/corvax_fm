@@ -27,6 +27,23 @@ pub async fn copy_file_task(
     }
 }
 
+pub async fn move_item_task(
+    task_id: Uuid,
+    src: PathBuf,
+    dest: PathBuf,
+    progress_tx: mpsc::Sender<(Uuid, ProgressEvent)>,
+) {
+    let result = fs::rename(&src, &dest).await;
+    match result {
+        Ok(_) => {
+            let _ = progress_tx.send((task_id, ProgressEvent::Completed)).await;
+        }
+        Err(e) => {
+            let _ = progress_tx.send((task_id, ProgressEvent::Error(e.to_string()))).await;
+        }
+    }
+}
+
 use tokio::fs::File;
 use tokio::io::{AsyncBufReadExt, BufReader};
 

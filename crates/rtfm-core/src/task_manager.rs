@@ -88,6 +88,9 @@ impl TaskManager {
                         TaskKind::Copy { src, dest } => {
                             fs_ops::copy_file_task(task_id, src, dest, progress_tx).await;
                         }
+                        TaskKind::Move { src, dest } => {
+                            fs_ops::move_item_task(task_id, src, dest, progress_tx).await;
+                        }
                         _ => {
                             // Placeholder for other task kinds
                         }
