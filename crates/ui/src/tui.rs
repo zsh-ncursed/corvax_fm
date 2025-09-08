@@ -56,9 +56,10 @@ impl Tui {
 /// Handles key presses and returns `false` if the app should quit.
 fn handle_key_press(key: KeyEvent, app_state: &mut AppState) -> bool {
     // Global keybindings
-    if key.modifiers == KeyModifiers::CONTROL {
+    if key.modifiers.contains(KeyModifiers::CONTROL) {
         match key.code {
             KeyCode::Char('n') => {
+                log::info!("Ctrl+N key press detected");
                 app_state.new_tab();
                 return true;
             }
@@ -79,18 +80,13 @@ fn handle_key_press(key: KeyEvent, app_state: &mut AppState) -> bool {
     }
 
     // Ctrl-Shift-Tab for previous tab
-    if key.modifiers == (KeyModifiers::CONTROL | KeyModifiers::SHIFT) && key.code == KeyCode::Tab {
+    if key.modifiers.contains(KeyModifiers::CONTROL | KeyModifiers::SHIFT) && key.code == KeyCode::Tab {
          app_state.previous_tab();
          return true;
     }
-    // crossterm might send BackTab for Shift-Tab
-    if key.code == KeyCode::BackTab && key.modifiers == KeyModifiers::CONTROL {
-        app_state.previous_tab();
-        return true;
-    }
 
     // Alt-number for tab switching
-    if key.modifiers == KeyModifiers::ALT {
+    if key.modifiers.contains(KeyModifiers::ALT) {
         if let KeyCode::Char(c @ '1'..='9') = key.code {
             let tab_index = c.to_digit(10).unwrap_or(0) as usize;
             if tab_index > 0 && tab_index <= app_state.tabs.len() {
@@ -99,39 +95,54 @@ fn handle_key_press(key: KeyEvent, app_state: &mut AppState) -> bool {
             return true;
         }
     }
+    // crossterm might send BackTab for Shift-Tab
+    if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::BackTab {
+        app_state.previous_tab();
+        return true;
+    }
+
 
     // Normal mode keybindings
+    use rtfm_core::app_state::FocusBlock;
     match key.code {
-        KeyCode::Tab => {
-            app_state.cycle_focus();
-        }
         KeyCode::Char('q') => return false, // Signal to quit
-        KeyCode::Char('y') => {
-            app_state.yank_selection();
-        }
-        KeyCode::Char('d') => {
-            app_state.cut_selection();
-        }
-        KeyCode::Char('p') => {
-            app_state.paste();
-        }
-        KeyCode::Char('m') => {
-            app_state.add_bookmark();
-        }
-        KeyCode::Char('.') => {
-            app_state.toggle_hidden_files();
-        }
-        _ => {
-            let show_hidden = app_state.show_hidden_files;
-            let active_tab = app_state.get_active_tab_mut();
-            match key.code {
-                KeyCode::Char('j') | KeyCode::Down => active_tab.move_cursor_down(show_hidden),
-                KeyCode::Char('k') | KeyCode::Up => active_tab.move_cursor_up(show_hidden),
-                KeyCode::Char('h') | KeyCode::Left => active_tab.leave_directory(show_hidden),
-                KeyCode::Char('l') | KeyCode::Right | KeyCode::Enter => active_tab.enter_directory(show_hidden),
-                _ => {}
+        KeyCode::Tab => app_state.cycle_focus(),
+        KeyCode::Char('.') => app_state.toggle_hidden_files(),
+        KeyCode::Char('j') | KeyCode::Down => {
+            match app_state.focus {
+                FocusBlock::Middle => {
+                    let show_hidden = app_state.show_hidden_files;
+                    app_state.get_active_tab_mut().move_cursor_down(show_hidden);
+                },
+                _ => app_state.move_left_pane_cursor_down(),
             }
-        }
+        },
+        KeyCode::Char('k') | KeyCode::Up => {
+            match app_state.focus {
+                FocusBlock::Middle => {
+                    let show_hidden = app_state.show_hidden_files;
+                    app_state.get_active_tab_mut().move_cursor_up(show_hidden);
+                },
+                _ => app_state.move_left_pane_cursor_up(),
+            }
+        },
+        KeyCode::Char('h') | KeyCode::Left => {
+            if app_state.focus == FocusBlock::Middle {
+                let show_hidden = app_state.show_hidden_files;
+                app_state.get_active_tab_mut().leave_directory(show_hidden);
+            }
+        },
+        KeyCode::Char('l') | KeyCode::Right | KeyCode::Enter => {
+            if app_state.focus == FocusBlock::Middle {
+                let show_hidden = app_state.show_hidden_files;
+                app_state.get_active_tab_mut().enter_directory(show_hidden);
+            }
+        },
+        KeyCode::Char('y') => app_state.yank_selection(),
+        KeyCode::Char('d') => app_state.cut_selection(),
+        KeyCode::Char('p') => app_state.paste(),
+        KeyCode::Char('m') => app_state.add_bookmark(),
+        _ => {}
     }
     true
 }

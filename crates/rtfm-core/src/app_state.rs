@@ -11,6 +11,14 @@ use log;
 use crate::plugin_manager::PluginManager;
 #[cfg(feature = "mounts")]
 use proc_mounts::MountIter;
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum FocusBlock {
+    Xdg,
+    Bookmarks,
+    Disks,
+    Middle,
+}
 #[derive(Debug, Clone)]
 pub struct DirEntry {
     pub name: String,
@@ -28,14 +36,19 @@ pub struct TabState {
 }
 
 impl TabState {
-    pub fn new(id: usize, current_dir: PathBuf) -> Self {
+    pub fn new(id: usize) -> Self {
         Self {
             id,
-            current_dir,
+            current_dir: std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/")),
             entries: Vec::new(),
             cursor: 0,
             preview_state: Arc::new(Mutex::new(PreviewState::default())),
         }
+    }
+
+    pub fn set_current_dir(&mut self, new_path: PathBuf, show_hidden: bool) {
+        self.current_dir = new_path;
+        self.update_entries(show_hidden);
     }
 
     pub fn update_entries(&mut self, show_hidden: bool) {
@@ -108,31 +121,31 @@ impl TabState {
             *preview_state_clone.lock().unwrap() = PreviewState::Loading;
 
             if path.is_dir() {
-                tokio::spawn(async move {
-                    let entries = match fs::read_dir(&path) {
-                        Ok(entries) => entries
-                            .filter_map(|res| res.ok())
-                            .filter(|entry| {
-                                if show_hidden {
-                                    true
-                                } else {
-                                    !entry.file_name().to_string_lossy().starts_with('.')
-                                }
-                            })
-                            .map(|entry| {
-                                let path = entry.path();
-                                let is_dir = path.is_dir();
-                                let name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
-                                DirEntry { name, path, is_dir }
-                            })
-                            .collect(),
-                        Err(e) => {
-                            *preview_state_clone.lock().unwrap() = PreviewState::Error(e.to_string());
-                            return;
-                        }
-                    };
-                    *preview_state_clone.lock().unwrap() = PreviewState::Directory(entries);
-                });
+                // This is a temporary synchronous implementation for simplicity.
+                // A better implementation would use tokio::spawn_blocking.
+                let entries = match fs::read_dir(&path) {
+                    Ok(entries) => entries
+                        .filter_map(|res| res.ok())
+                        .filter(|entry| {
+                            if show_hidden {
+                                true
+                            } else {
+                                !entry.file_name().to_string_lossy().starts_with('.')
+                            }
+                        })
+                        .map(|entry| {
+                            let path = entry.path();
+                            let is_dir = path.is_dir();
+                            let name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                            DirEntry { name, path, is_dir }
+                        })
+                        .collect(),
+                    Err(e) => {
+                        *preview_state_clone.lock().unwrap() = PreviewState::Error(e.to_string());
+                        return;
+                    }
+                };
+                *preview_state_clone.lock().unwrap() = PreviewState::Directory(entries);
             } else {
                 tokio::spawn(async move {
                     let result = fs_ops::load_text_preview(path).await;
@@ -149,13 +162,6 @@ impl TabState {
 }
 
 
-#[derive(Debug, PartialEq, Eq)]
-pub enum FocusBlock {
-    Xdg,
-    Bookmarks,
-    Disks,
-}
-
 #[derive(Debug)]
 pub struct AppState {
     pub tabs: Vec<TabState>,
@@ -163,12 +169,16 @@ pub struct AppState {
     pub task_manager: TaskManager,
     pub clipboard: Clipboard,
     pub show_terminal: bool,
-    pub show_hidden_files: bool,
+    pub show_hidden_files: bool, // Re-add this
     pub focus: FocusBlock,
     pub xdg_dirs: Vec<(String, PathBuf)>,
+    pub xdg_cursor: usize,
     pub bookmarks: Vec<(String, PathBuf)>,
+    pub bookmarks_cursor: usize,
     #[cfg(feature = "mounts")]
     pub mounts: Vec<proc_mounts::MountInfo>,
+    #[cfg(feature = "mounts")]
+    pub disks_cursor: usize,
     pub config: Config,
     pub plugin_manager: PluginManager,
 }
@@ -213,7 +223,7 @@ impl AppState {
         };
 
         let show_hidden_files = false;
-        let mut initial_tab = TabState::new(0, std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/")));
+        let mut initial_tab = TabState::new(0);
         initial_tab.update_entries(show_hidden_files);
 
         Self {
@@ -223,22 +233,18 @@ impl AppState {
             clipboard: Clipboard::new(),
             show_terminal: false,
             show_hidden_files,
-            focus: FocusBlock::Xdg,
+            focus: FocusBlock::Middle,
             xdg_dirs,
+            xdg_cursor: 0,
             bookmarks,
+            bookmarks_cursor: 0,
             plugin_manager: PluginManager::new(),
             #[cfg(feature = "mounts")]
             mounts,
+            #[cfg(feature = "mounts")]
+            disks_cursor: 0,
             config,
         }
-    }
-
-    pub fn cycle_focus(&mut self) {
-        self.focus = match self.focus {
-            FocusBlock::Xdg => FocusBlock::Bookmarks,
-            FocusBlock::Bookmarks => FocusBlock::Disks,
-            FocusBlock::Disks => FocusBlock::Xdg,
-        };
     }
 
     pub fn get_active_tab_mut(&mut self) -> &mut TabState {
@@ -247,6 +253,86 @@ impl AppState {
 
     pub fn get_active_tab(&self) -> &TabState {
         &self.tabs[self.active_tab_index]
+    }
+
+    pub fn cycle_focus(&mut self) {
+        self.focus = match self.focus {
+            FocusBlock::Xdg => FocusBlock::Bookmarks,
+            FocusBlock::Bookmarks => FocusBlock::Disks,
+            FocusBlock::Disks => FocusBlock::Middle,
+            FocusBlock::Middle => FocusBlock::Xdg,
+        };
+    }
+
+    pub fn move_left_pane_cursor_down(&mut self) {
+        match self.focus {
+            FocusBlock::Xdg => {
+                let max = self.xdg_dirs.len().saturating_sub(1);
+                if self.xdg_cursor < max { self.xdg_cursor += 1; }
+            },
+            FocusBlock::Bookmarks => {
+                let max = self.bookmarks.len().saturating_sub(1);
+                if self.bookmarks_cursor < max { self.bookmarks_cursor += 1; }
+            },
+            FocusBlock::Disks => {
+                #[cfg(feature = "mounts")]
+                {
+                    let max = self.mounts.len().saturating_sub(1);
+                    if self.disks_cursor < max { self.disks_cursor += 1; }
+                }
+            },
+            FocusBlock::Middle => {}, // Should not happen
+        }
+        self.update_middle_pane_from_left_pane_selection();
+    }
+
+    pub fn move_left_pane_cursor_up(&mut self) {
+        match self.focus {
+            FocusBlock::Xdg => {
+                if self.xdg_cursor > 0 { self.xdg_cursor -= 1; }
+            },
+            FocusBlock::Bookmarks => {
+                if self.bookmarks_cursor > 0 { self.bookmarks_cursor -= 1; }
+            },
+            FocusBlock::Disks => {
+                #[cfg(feature = "mounts")]
+                {
+                    if self.disks_cursor > 0 { self.disks_cursor -= 1; }
+                }
+            },
+            FocusBlock::Middle => {}, // Should not happen
+        }
+        self.update_middle_pane_from_left_pane_selection();
+    }
+
+    pub fn update_middle_pane_from_left_pane_selection(&mut self) {
+        let path = match self.focus {
+            FocusBlock::Xdg => self.xdg_dirs.get(self.xdg_cursor).map(|(_, path)| path.clone()),
+            FocusBlock::Bookmarks => self.bookmarks.get(self.bookmarks_cursor).map(|(_, path)| path.clone()),
+            FocusBlock::Disks => {
+                #[cfg(feature = "mounts")]
+                {
+                    self.mounts.get(self.disks_cursor).map(|mount| mount.dest.clone())
+                }
+                #[cfg(not(feature = "mounts"))]
+                {
+                    None
+                }
+            },
+            FocusBlock::Middle => None, // No-op
+        };
+
+        if let Some(path) = path {
+            let show_hidden = self.show_hidden_files;
+            self.get_active_tab_mut().set_current_dir(path, show_hidden);
+        }
+    }
+
+    pub fn toggle_hidden_files(&mut self) {
+        self.show_hidden_files = !self.show_hidden_files;
+        for tab in &mut self.tabs {
+            tab.update_entries(self.show_hidden_files);
+        }
     }
 
     pub fn yank_selection(&mut self) {
@@ -284,10 +370,6 @@ impl AppState {
         if mode == ClipboardMode::Move {
             self.clipboard.clear();
         }
-
-        // Refresh the view to show the new files
-        let show_hidden = self.show_hidden_files;
-        self.get_active_tab_mut().update_entries(show_hidden);
     }
 
     pub fn next_tab(&mut self) {
@@ -303,19 +385,13 @@ impl AppState {
     }
 
     pub fn new_tab(&mut self) {
+        log::info!("new_tab called. Current tab count: {}", self.tabs.len());
         let new_id = self.tabs.len();
-        let current_dir = self.get_active_tab().current_dir.clone();
-        let mut new_tab = TabState::new(new_id, current_dir);
+        let mut new_tab = TabState::new(new_id);
         new_tab.update_entries(self.show_hidden_files);
         self.tabs.push(new_tab);
         self.active_tab_index = new_id;
-    }
-
-    pub fn toggle_hidden_files(&mut self) {
-        self.show_hidden_files = !self.show_hidden_files;
-        for tab in &mut self.tabs {
-            tab.update_entries(self.show_hidden_files);
-        }
+        log::info!("new_tab finished. New tab count: {}. Active index: {}", self.tabs.len(), self.active_tab_index);
     }
 
     pub fn close_tab(&mut self) {
