@@ -6,7 +6,6 @@ use ratatui::{
 };
 use rtfm_core::app_state::AppState;
 use rtfm_core::clipboard::ClipboardMode;
-use std::fs;
 
 pub fn render_main_layout(frame: &mut Frame, app_state: &AppState) {
     let top_bar_height = if app_state.show_tabs { 2 } else { 0 };
@@ -119,41 +118,31 @@ fn render_tasks_footer(frame: &mut Frame, area: Rect, app_state: &AppState) {
 fn render_info_panel(frame: &mut Frame, area: Rect, app_state: &AppState) {
     let block = Block::default().borders(Borders::ALL).title("Info");
     let inner_area = block.inner(area);
-    frame.render_widget(block, area);
 
-    let active_tab = app_state.get_active_tab();
-    let current_dir = &active_tab.current_dir;
-    let mut info_text = vec![];
-
-    // Directory Info
-    info_text.push(format!("Path: {}", current_dir.display()));
-    if let Ok(metadata) = fs::metadata(current_dir) {
-        if let Ok(created) = metadata.created() {
-            let datetime: chrono::DateTime<chrono::Local> = created.into();
-            info_text.push(format!("Created: {}", datetime.format("%Y-%m-%d %H:%M:%S")));
-        }
-    }
-    let size_str = match *active_tab.dir_size.lock().unwrap() {
-        Some(size) => format!("Size: {} bytes", size),
-        None => "Size: Calculating...".to_string(),
+    let content = app_state.info_panel_content.lock().unwrap();
+    let text = if let Some(content) = content.as_ref() {
+        content.clone()
+    } else {
+        String::new()
     };
-    info_text.push(size_str);
 
-    // Clipboard Info
+    // Always display clipboard info
     let clipboard = &app_state.clipboard;
-    if !clipboard.paths.is_empty() {
+    let clipboard_info = if !clipboard.paths.is_empty() {
         let mode = match clipboard.mode {
             Some(ClipboardMode::Copy) => "Copy",
             Some(ClipboardMode::Move) => "Move",
             None => "None",
         };
-        info_text.push(format!("Buffer: {} files ({})", clipboard.paths.len(), mode));
+        format!("\n\nBuffer: {} files ({})", clipboard.paths.len(), mode)
     } else {
-        info_text.push("Buffer: Empty".to_string());
-    }
+        "\n\nBuffer: Empty".to_string()
+    };
 
-    let paragraph = Paragraph::new(info_text.join("\n"))
+    let final_text = format!("{}{}", text, clipboard_info);
+    let paragraph = Paragraph::new(final_text)
         .wrap(Wrap { trim: true });
 
     frame.render_widget(paragraph, inner_area);
+    frame.render_widget(block, area);
 }
