@@ -33,6 +33,7 @@ pub struct TabState {
     pub entries: Vec<DirEntry>,
     pub cursor: usize,
     pub preview_state: Arc<Mutex<PreviewState>>,
+    pub dir_size: Arc<Mutex<Option<u64>>>,
 }
 
 impl TabState {
@@ -43,12 +44,24 @@ impl TabState {
             entries: Vec::new(),
             cursor: 0,
             preview_state: Arc::new(Mutex::new(PreviewState::default())),
+            dir_size: Arc::new(Mutex::new(None)),
         }
     }
 
     pub fn set_current_dir(&mut self, new_path: PathBuf, show_hidden: bool) {
         self.current_dir = new_path;
         self.update_entries(show_hidden);
+
+        // Reset size cache and start calculation
+        *self.dir_size.lock().unwrap() = None;
+        let dir_size_clone = Arc::clone(&self.dir_size);
+        let current_dir_clone = self.current_dir.clone();
+
+        tokio::spawn(async move {
+            if let Ok(size) = fs_extra::dir::get_size(&current_dir_clone) {
+                *dir_size_clone.lock().unwrap() = Some(size);
+            }
+        });
     }
 
     pub fn update_entries(&mut self, show_hidden: bool) {

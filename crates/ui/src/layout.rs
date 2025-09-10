@@ -7,7 +7,6 @@ use ratatui::{
 use rtfm_core::app_state::AppState;
 use rtfm_core::clipboard::ClipboardMode;
 use std::fs;
-use fs_extra::dir::get_size;
 
 pub fn render_main_layout(frame: &mut Frame, app_state: &AppState) {
     let top_bar_height = if app_state.show_tabs { 2 } else { 0 };
@@ -134,9 +133,11 @@ fn render_info_panel(frame: &mut Frame, area: Rect, app_state: &AppState) {
             info_text.push(format!("Created: {}", datetime.format("%Y-%m-%d %H:%M:%S")));
         }
     }
-    if let Ok(size) = get_size(current_dir) {
-        info_text.push(format!("Size: {} bytes", size));
-    }
+    let size_str = match *active_tab.dir_size.lock().unwrap() {
+        Some(size) => format!("Size: {} bytes", size),
+        None => "Size: Calculating...".to_string(),
+    };
+    info_text.push(size_str);
 
     // Clipboard Info
     let clipboard = &app_state.clipboard;

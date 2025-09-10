@@ -1033,7 +1033,6 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "crossterm",
- "fs_extra",
  "log",
  "ratatui",
  "rtfm-core",
