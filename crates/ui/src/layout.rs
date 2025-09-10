@@ -1,29 +1,27 @@
+use crate::{left_pane, middle_pane, right_pane, top_bar};
 use ratatui::{
-    prelude::{Color, Constraint, Direction, Layout, Modifier, Rect, Style},
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Tabs},
+    prelude::{Constraint, Direction, Layout, Rect},
+    widgets::{Block, Borders, List, ListItem},
     Frame,
 };
-use rtfm_core::app_state::{AppState, TabState};
-use rtfm_core::preview::PreviewState;
-use crate::left_pane;
+use rtfm_core::app_state::AppState;
 
 pub fn render_main_layout(frame: &mut Frame, app_state: &AppState) {
-    // The spec defines a top bar for tabs
     let main_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(1), // Tabs
+            Constraint::Length(3), // Top bar
             Constraint::Min(0),    // Main content
-            Constraint::Length(6), // Footer
+            Constraint::Length(1), // Footer
         ])
         .split(frame.size());
 
-    let top_bar = main_chunks[0];
+    let top_bar_area = main_chunks[0];
     let main_area = main_chunks[1];
-    let footer = main_chunks[2];
+    let footer_area = main_chunks[2];
 
     // --- Top Bar (Tabs) ---
-    render_tabs(frame, top_bar, app_state);
+    top_bar::render_top_bar(frame, top_bar_area, app_state);
 
     // --- Main Area (Left, Middle, Right) ---
     let main_horizontal_chunks = Layout::default()
@@ -63,14 +61,13 @@ pub fn render_main_layout(frame: &mut Frame, app_state: &AppState) {
         .borders(Borders::ALL);
     let middle_pane_inner_area = middle_pane_block.inner(middle_pane_area);
     frame.render_widget(middle_pane_block, middle_pane_area);
-    render_middle_pane(frame, middle_pane_inner_area, active_tab);
+    middle_pane::render_middle_pane(frame, middle_pane_inner_area, active_tab);
 
     // Right Pane
     let right_pane_block = Block::default().title("Preview").borders(Borders::ALL);
     let right_pane_inner_area = right_pane_block.inner(right_pane_area);
     frame.render_widget(right_pane_block, right_pane_area);
-    render_right_pane(frame, right_pane_inner_area, active_tab);
-
+    right_pane::render_right_pane(frame, right_pane_inner_area, active_tab);
 
     // --- Footer (Terminal, Info) ---
     if app_state.show_terminal {
@@ -80,7 +77,7 @@ pub fn render_main_layout(frame: &mut Frame, app_state: &AppState) {
                 Constraint::Percentage(50), // Terminal
                 Constraint::Percentage(50), // Info
             ])
-            .split(footer);
+            .split(footer_area);
 
         frame.render_widget(
             Block::new().borders(Borders::ALL).title("Terminal"),
@@ -89,7 +86,7 @@ pub fn render_main_layout(frame: &mut Frame, app_state: &AppState) {
         render_info_footer(frame, footer_chunks[1], app_state);
     } else {
         // If terminal is hidden, info pane takes the whole footer
-        render_info_footer(frame, footer, app_state);
+        render_info_footer(frame, footer_area, app_state);
     }
 }
 
@@ -108,72 +105,6 @@ fn render_left_pane(frame: &mut Frame, area: Rect, app_state: &AppState) {
     left_pane::render_mounts_block(frame, left_chunks[2], app_state);
 }
 
-fn render_tabs(frame: &mut Frame, area: Rect, app_state: &AppState) {
-    log::debug!("Rendering tabs. Tab count: {}", app_state.tabs.len());
-    let titles: Vec<String> = app_state
-        .tabs
-        .iter()
-        .map(|tab| {
-            format!(
-                "{} {}",
-                tab.id + 1,
-                tab.current_dir.file_name().unwrap_or_default().to_string_lossy()
-            )
-        })
-        .collect();
-
-    let tabs = Tabs::new(titles)
-        .block(Block::default().borders(Borders::BOTTOM))
-        .select(app_state.active_tab_index)
-        .style(Style::default().fg(Color::White))
-        .highlight_style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD));
-
-    frame.render_widget(tabs, area);
-}
-
-use std::path::Path;
-
-fn get_icon_for_path(path: &Path, is_dir: bool) -> &'static str {
-    if is_dir {
-        return ""; // Folder icon
-    }
-    match path.extension().and_then(|s| s.to_str()) {
-        Some("jpg") | Some("jpeg") | Some("png") | Some("gif") | Some("bmp") => "", // Image icon
-        Some("zip") | Some("gz") | Some("tar") | Some("rar") | Some("7z") => "", // Archive icon
-        Some("txt") | Some("md") => "", // Text file icon
-        Some("mp3") | Some("wav") | Some("flac") => "🎵", // Audio icon
-        Some("mp4") | Some("mkv") | Some("mov") | Some("avi") => "", // Video icon
-        Some("rs") | Some("js") | Some("html") | Some("css") | Some("py") | Some("toml") | Some("sh") => "", // Code icon
-        _ => "", // Generic file icon
-    }
-}
-
-fn render_middle_pane(frame: &mut Frame, area: Rect, tab_state: &TabState) {
-    let items: Vec<ListItem> = tab_state
-        .entries
-        .iter()
-        .map(|entry| {
-            let is_hidden = entry.name.starts_with('.');
-            let style = if is_hidden { Style::default().fg(Color::DarkGray) } else { Style::default() };
-
-            let icon = get_icon_for_path(&entry.path, entry.is_dir);
-            let mut name = format!("{} {}", icon, entry.name.clone());
-            if entry.is_dir {
-                name.push('/');
-            }
-            ListItem::new(name).style(style)
-        })
-        .collect();
-
-    let list = List::new(items)
-        .highlight_symbol(">> ");
-
-    let mut list_state = ListState::default();
-    list_state.select(Some(tab_state.cursor));
-
-    frame.render_stateful_widget(list, area, &mut list_state);
-}
-
 fn render_info_footer(frame: &mut Frame, area: Rect, app_state: &AppState) {
     let block = Block::default().borders(Borders::ALL).title("Tasks");
     let inner_area = block.inner(area);
@@ -188,40 +119,4 @@ fn render_info_footer(frame: &mut Frame, area: Rect, app_state: &AppState) {
     let task_list = List::new(task_items);
 
     frame.render_widget(task_list, inner_area);
-}
-
-fn render_right_pane(frame: &mut Frame, area: Rect, tab_state: &TabState) {
-    let preview_state = tab_state.preview_state.lock().unwrap();
-
-    match &*preview_state {
-        PreviewState::Directory(entries) => {
-            let items: Vec<ListItem> = entries
-                .iter()
-                .map(|entry| {
-                    let is_hidden = entry.name.starts_with('.');
-                    let style = if is_hidden { Style::default().fg(Color::DarkGray) } else { Style::default() };
-
-                    let icon = get_icon_for_path(&entry.path, entry.is_dir);
-                    let mut name = format!("{} {}", icon, entry.name.clone());
-                    if entry.is_dir {
-                        name.push('/');
-                    }
-                    ListItem::new(name).style(style)
-                })
-                .collect();
-            let list = List::new(items);
-            frame.render_widget(list, area);
-        }
-        _ => {
-            let content = match &*preview_state {
-                PreviewState::Empty => "Empty",
-                PreviewState::Loading => "Loading...",
-                PreviewState::Text(text) => text,
-                PreviewState::Error(e) => e,
-                PreviewState::Directory(_) => unreachable!(),
-            };
-            let paragraph = Paragraph::new(content);
-            frame.render_widget(paragraph, area);
-        }
-    }
 }
