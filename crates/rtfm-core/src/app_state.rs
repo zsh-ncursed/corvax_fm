@@ -182,6 +182,7 @@ pub struct AppState {
     pub disks_cursor: usize,
     pub config: Config,
     pub plugin_manager: PluginManager,
+    pub info_panel_content: Arc<Mutex<Option<String>>>,
 }
 
 impl AppState {
@@ -246,6 +247,7 @@ impl AppState {
             #[cfg(feature = "mounts")]
             disks_cursor: 0,
             config,
+            info_panel_content: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -429,6 +431,39 @@ impl AppState {
             if let Err(e) = config::save_config(&self.config) {
                 log::error!("Failed to save config: {}", e);
             }
+        }
+    }
+
+    pub fn clear_info_panel(&mut self) {
+        *self.info_panel_content.lock().unwrap() = None;
+    }
+
+    pub fn update_info_panel(&mut self) {
+        if let Some(path) = self.get_active_tab().get_selected_entry_path() {
+            let info_panel_content_clone = Arc::clone(&self.info_panel_content);
+            *info_panel_content_clone.lock().unwrap() = Some("Calculating...".to_string());
+
+            tokio::spawn(async move {
+                let mut info_text = vec![];
+                if let Ok(metadata) = fs::metadata(&path) {
+                    if let Ok(created) = metadata.created() {
+                        let datetime: chrono::DateTime<chrono::Local> = created.into();
+                        info_text.push(format!("Created: {}", datetime.format("%Y-%m-%d %H:%M:%S")));
+                    }
+
+                    let size = if metadata.is_dir() {
+                        fs_extra::dir::get_size(&path).unwrap_or(0)
+                    } else {
+                        metadata.len()
+                    };
+                    info_text.push(format!("Size: {} bytes", size));
+
+                    let final_info = info_text.join("\n");
+                    *info_panel_content_clone.lock().unwrap() = Some(final_info);
+                } else {
+                    *info_panel_content_clone.lock().unwrap() = Some("Failed to get info".to_string());
+                }
+            });
         }
     }
 }

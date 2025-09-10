@@ -113,6 +113,7 @@ fn handle_key_press(key: KeyEvent, app_state: &mut AppState) -> bool {
     use rtfm_core::app_state::FocusBlock;
     match key.code {
         KeyCode::Char('q') => return false, // Signal to quit
+        KeyCode::Char('i') => app_state.update_info_panel(),
         KeyCode::Tab => app_state.cycle_focus(),
         KeyCode::Char('.') => app_state.toggle_hidden_files(),
         KeyCode::Char('j') | KeyCode::Down => {
@@ -120,8 +121,12 @@ fn handle_key_press(key: KeyEvent, app_state: &mut AppState) -> bool {
                 FocusBlock::Middle => {
                     let show_hidden = app_state.show_hidden_files;
                     app_state.get_active_tab_mut().move_cursor_down(show_hidden);
+                    app_state.clear_info_panel();
                 },
-                _ => app_state.move_left_pane_cursor_down(),
+                _ => {
+                    app_state.move_left_pane_cursor_down();
+                    app_state.clear_info_panel();
+                }
             }
         },
         KeyCode::Char('k') | KeyCode::Up => {
@@ -129,20 +134,26 @@ fn handle_key_press(key: KeyEvent, app_state: &mut AppState) -> bool {
                 FocusBlock::Middle => {
                     let show_hidden = app_state.show_hidden_files;
                     app_state.get_active_tab_mut().move_cursor_up(show_hidden);
+                    app_state.clear_info_panel();
                 },
-                _ => app_state.move_left_pane_cursor_up(),
+                _ => {
+                    app_state.move_left_pane_cursor_up();
+                    app_state.clear_info_panel();
+                }
             }
         },
         KeyCode::Char('h') | KeyCode::Left => {
             if app_state.focus == FocusBlock::Middle {
                 let show_hidden = app_state.show_hidden_files;
                 app_state.get_active_tab_mut().leave_directory(show_hidden);
+                app_state.clear_info_panel();
             }
         },
         KeyCode::Char('l') | KeyCode::Right | KeyCode::Enter => {
             if app_state.focus == FocusBlock::Middle {
                 let show_hidden = app_state.show_hidden_files;
                 app_state.get_active_tab_mut().enter_directory(show_hidden);
+                app_state.clear_info_panel();
             }
         },
         KeyCode::Char('y') => app_state.yank_selection(),

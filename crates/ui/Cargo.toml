@@ -8,8 +8,6 @@ ratatui = { workspace = true }
 crossterm = { workspace = true }
 rtfm-core = { path = "../rtfm-core" }
 log = { workspace = true }
-fs_extra = "1.3.0"
-chrono = "0.4"
 
 [features]
 mounts = []
