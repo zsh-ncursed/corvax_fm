@@ -19,7 +19,7 @@ async fn test_clipboard_yank_and_paste() {
 
     let mut app_state = AppState::new();
     app_state.get_active_tab_mut().current_dir = tmp_dir.path().to_path_buf();
-    app_state.get_active_tab_mut().update_entries();
+    app_state.get_active_tab_mut().update_entries(false);
 
     // Yank the file
     app_state.get_active_tab_mut().cursor = 0; // Assuming the file is the first entry
