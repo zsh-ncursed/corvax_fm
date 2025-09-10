@@ -87,12 +87,19 @@ fn handle_key_press(key: KeyEvent, app_state: &mut AppState) -> bool {
 
     // Alt-number for tab switching
     if key.modifiers.contains(KeyModifiers::ALT) {
-        if let KeyCode::Char(c @ '1'..='9') = key.code {
-            let tab_index = c.to_digit(10).unwrap_or(0) as usize;
-            if tab_index > 0 && tab_index <= app_state.tabs.len() {
-                app_state.active_tab_index = tab_index - 1;
+        match key.code {
+            KeyCode::Char(c @ '1'..='9') => {
+                let tab_index = c.to_digit(10).unwrap_or(0) as usize;
+                if tab_index > 0 && tab_index <= app_state.tabs.len() {
+                    app_state.active_tab_index = tab_index - 1;
+                }
+                return true;
             }
-            return true;
+            KeyCode::Char('t') => {
+                app_state.toggle_tabs();
+                return true;
+            }
+            _ => {}
         }
     }
     // crossterm might send BackTab for Shift-Tab
