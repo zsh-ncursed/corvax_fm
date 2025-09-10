@@ -12,6 +12,8 @@ directories = { workspace = true }
 config = { path = "../config" }
 proc-mounts = { workspace = true, optional = true }
 plugin-ipc = { path = "../plugin-ipc" }
+fs_extra = "1.3.0"
+chrono = { version = "0.4", features = ["serde"] }
 
 [dev-dependencies]
 tempdir = { workspace = true }

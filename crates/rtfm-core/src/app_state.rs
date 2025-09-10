@@ -166,6 +166,7 @@ impl TabState {
 pub struct AppState {
     pub tabs: Vec<TabState>,
     pub active_tab_index: usize,
+    pub show_tabs: bool,
     pub task_manager: TaskManager,
     pub clipboard: Clipboard,
     pub show_terminal: bool,
@@ -229,6 +230,7 @@ impl AppState {
         Self {
             tabs: vec![initial_tab],
             active_tab_index: 0,
+            show_tabs: false, // Hidden by default with one tab
             task_manager: TaskManager::new(),
             clipboard: Clipboard::new(),
             show_terminal: false,
@@ -245,6 +247,10 @@ impl AppState {
             disks_cursor: 0,
             config,
         }
+    }
+
+    pub fn toggle_tabs(&mut self) {
+        self.show_tabs = !self.show_tabs;
     }
 
     pub fn get_active_tab_mut(&mut self) -> &mut TabState {
@@ -385,12 +391,16 @@ impl AppState {
     }
 
     pub fn new_tab(&mut self) {
+        if self.tabs.len() >= 10 {
+            return;
+        }
         log::info!("new_tab called. Current tab count: {}", self.tabs.len());
         let new_id = self.tabs.len();
         let mut new_tab = TabState::new(new_id);
         new_tab.update_entries(self.show_hidden_files);
         self.tabs.push(new_tab);
         self.active_tab_index = new_id;
+        self.show_tabs = true; // Show tabs when a new one is created
         log::info!("new_tab finished. New tab count: {}. Active index: {}", self.tabs.len(), self.active_tab_index);
     }
 
@@ -399,6 +409,9 @@ impl AppState {
             self.tabs.remove(self.active_tab_index);
             if self.active_tab_index >= self.tabs.len() {
                 self.active_tab_index = self.tabs.len() - 1;
+            }
+            if self.tabs.len() == 1 {
+                self.show_tabs = false; // Hide tabs when only one is left
             }
         }
     }

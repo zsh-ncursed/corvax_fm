@@ -1,18 +1,22 @@
 use crate::{left_pane, middle_pane, right_pane, top_bar};
 use ratatui::{
     prelude::{Constraint, Direction, Layout, Rect},
-    widgets::{Block, Borders, List, ListItem},
+    widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
     Frame,
 };
 use rtfm_core::app_state::AppState;
+use rtfm_core::clipboard::ClipboardMode;
+use std::fs;
+use fs_extra::dir::get_size;
 
 pub fn render_main_layout(frame: &mut Frame, app_state: &AppState) {
+    let top_bar_height = if app_state.show_tabs { 2 } else { 0 };
     let main_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3), // Top bar
+            Constraint::Length(top_bar_height), // Top bar
             Constraint::Min(0),    // Main content
-            Constraint::Length(1), // Footer
+            Constraint::Length(6), // Footer
         ])
         .split(frame.size());
 
@@ -69,25 +73,17 @@ pub fn render_main_layout(frame: &mut Frame, app_state: &AppState) {
     frame.render_widget(right_pane_block, right_pane_area);
     right_pane::render_right_pane(frame, right_pane_inner_area, active_tab);
 
-    // --- Footer (Terminal, Info) ---
-    if app_state.show_terminal {
-        let footer_chunks = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Percentage(50), // Terminal
-                Constraint::Percentage(50), // Info
-            ])
-            .split(footer_area);
+    // --- Footer (Tasks, Info) ---
+    let footer_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(50), // Tasks
+            Constraint::Percentage(50), // Info
+        ])
+        .split(footer_area);
 
-        frame.render_widget(
-            Block::new().borders(Borders::ALL).title("Terminal"),
-            footer_chunks[0],
-        );
-        render_info_footer(frame, footer_chunks[1], app_state);
-    } else {
-        // If terminal is hidden, info pane takes the whole footer
-        render_info_footer(frame, footer_area, app_state);
-    }
+    render_tasks_footer(frame, footer_chunks[0], app_state);
+    render_info_panel(frame, footer_chunks[1], app_state);
 }
 
 fn render_left_pane(frame: &mut Frame, area: Rect, app_state: &AppState) {
@@ -105,7 +101,7 @@ fn render_left_pane(frame: &mut Frame, area: Rect, app_state: &AppState) {
     left_pane::render_mounts_block(frame, left_chunks[2], app_state);
 }
 
-fn render_info_footer(frame: &mut Frame, area: Rect, app_state: &AppState) {
+fn render_tasks_footer(frame: &mut Frame, area: Rect, app_state: &AppState) {
     let block = Block::default().borders(Borders::ALL).title("Tasks");
     let inner_area = block.inner(area);
     frame.render_widget(block, area);
@@ -119,4 +115,44 @@ fn render_info_footer(frame: &mut Frame, area: Rect, app_state: &AppState) {
     let task_list = List::new(task_items);
 
     frame.render_widget(task_list, inner_area);
+}
+
+fn render_info_panel(frame: &mut Frame, area: Rect, app_state: &AppState) {
+    let block = Block::default().borders(Borders::ALL).title("Info");
+    let inner_area = block.inner(area);
+    frame.render_widget(block, area);
+
+    let active_tab = app_state.get_active_tab();
+    let current_dir = &active_tab.current_dir;
+    let mut info_text = vec![];
+
+    // Directory Info
+    info_text.push(format!("Path: {}", current_dir.display()));
+    if let Ok(metadata) = fs::metadata(current_dir) {
+        if let Ok(created) = metadata.created() {
+            let datetime: chrono::DateTime<chrono::Local> = created.into();
+            info_text.push(format!("Created: {}", datetime.format("%Y-%m-%d %H:%M:%S")));
+        }
+    }
+    if let Ok(size) = get_size(current_dir) {
+        info_text.push(format!("Size: {} bytes", size));
+    }
+
+    // Clipboard Info
+    let clipboard = &app_state.clipboard;
+    if !clipboard.paths.is_empty() {
+        let mode = match clipboard.mode {
+            Some(ClipboardMode::Copy) => "Copy",
+            Some(ClipboardMode::Move) => "Move",
+            None => "None",
+        };
+        info_text.push(format!("Buffer: {} files ({})", clipboard.paths.len(), mode));
+    } else {
+        info_text.push("Buffer: Empty".to_string());
+    }
+
+    let paragraph = Paragraph::new(info_text.join("\n"))
+        .wrap(Wrap { trim: true });
+
+    frame.render_widget(paragraph, inner_area);
 }
