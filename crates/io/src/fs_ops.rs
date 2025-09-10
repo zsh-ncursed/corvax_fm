@@ -6,7 +6,7 @@ use uuid::Uuid;
 #[derive(Debug)]
 pub enum ProgressEvent {
     Update(f32),
-    Completed,
+    Completed { dest_path: PathBuf },
     Error(String),
 }
 
@@ -19,7 +19,32 @@ pub async fn copy_file_task(
     let result = fs::copy(&src, &dest).await;
     match result {
         Ok(_) => {
-            let _ = progress_tx.send((task_id, ProgressEvent::Completed)).await;
+            let event = ProgressEvent::Completed { dest_path: dest };
+            let _ = progress_tx.send((task_id, event)).await;
+        }
+        Err(e) => {
+            let _ = progress_tx.send((task_id, ProgressEvent::Error(e.to_string()))).await;
+        }
+    }
+}
+
+pub async fn delete_item_task(
+    task_id: Uuid,
+    path: PathBuf,
+    progress_tx: mpsc::Sender<(Uuid, ProgressEvent)>,
+) {
+    let result = if path.is_dir() {
+        fs::remove_dir_all(&path).await
+    } else {
+        fs::remove_file(&path).await
+    };
+
+    match result {
+        Ok(_) => {
+            // Upon successful deletion, the parent directory should be refreshed.
+            let parent = path.parent().unwrap_or(&path).to_path_buf();
+            let event = ProgressEvent::Completed { dest_path: parent };
+            let _ = progress_tx.send((task_id, event)).await;
         }
         Err(e) => {
             let _ = progress_tx.send((task_id, ProgressEvent::Error(e.to_string()))).await;
@@ -36,7 +61,8 @@ pub async fn move_item_task(
     let result = fs::rename(&src, &dest).await;
     match result {
         Ok(_) => {
-            let _ = progress_tx.send((task_id, ProgressEvent::Completed)).await;
+            let event = ProgressEvent::Completed { dest_path: dest };
+            let _ = progress_tx.send((task_id, event)).await;
         }
         Err(e) => {
             let _ = progress_tx.send((task_id, ProgressEvent::Error(e.to_string()))).await;

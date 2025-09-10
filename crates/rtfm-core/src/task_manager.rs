@@ -44,6 +44,7 @@ pub struct TaskManager {
     tasks: Arc<Mutex<Vec<Task>>>,
     progress_rx: Mutex<mpsc::Receiver<(Uuid, fs_ops::ProgressEvent)>>,
     progress_tx: mpsc::Sender<(Uuid, fs_ops::ProgressEvent)>,
+    pub completed_and_needs_refresh: Arc<Mutex<Vec<PathBuf>>>,
 }
 
 impl fmt::Debug for TaskManager {
@@ -61,6 +62,7 @@ impl TaskManager {
             tasks: Arc::new(Mutex::new(Vec::new())),
             progress_rx: Mutex::new(rx),
             progress_tx: tx,
+            completed_and_needs_refresh: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -91,8 +93,8 @@ impl TaskManager {
                         TaskKind::Move { src, dest } => {
                             fs_ops::move_item_task(task_id, src, dest, progress_tx).await;
                         }
-                        _ => {
-                            // Placeholder for other task kinds
+                        TaskKind::Delete { path } => {
+                            fs_ops::delete_item_task(task_id, path, progress_tx).await;
                         }
                     }
                 });
@@ -106,7 +108,10 @@ impl TaskManager {
             let mut tasks = self.tasks.lock().unwrap();
             if let Some(task) = tasks.iter_mut().find(|t| t.id == task_id) {
                 match event {
-                    fs_ops::ProgressEvent::Completed => task.status = TaskStatus::Completed,
+                    fs_ops::ProgressEvent::Completed { dest_path } => {
+                        task.status = TaskStatus::Completed;
+                        self.completed_and_needs_refresh.lock().unwrap().push(dest_path);
+                    }
                     fs_ops::ProgressEvent::Error(e) => task.status = TaskStatus::Failed(e),
                     fs_ops::ProgressEvent::Update(p) => task.status = TaskStatus::InProgress(p),
                 }

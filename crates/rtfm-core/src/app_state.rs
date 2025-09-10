@@ -166,6 +166,7 @@ impl TabState {
 pub struct AppState {
     pub tabs: Vec<TabState>,
     pub active_tab_index: usize,
+    pub show_tabs: bool,
     pub task_manager: TaskManager,
     pub clipboard: Clipboard,
     pub show_terminal: bool,
@@ -181,6 +182,8 @@ pub struct AppState {
     pub disks_cursor: usize,
     pub config: Config,
     pub plugin_manager: PluginManager,
+    pub info_panel_content: Arc<Mutex<Option<String>>>,
+    pub show_delete_confirmation: Option<PathBuf>,
 }
 
 impl AppState {
@@ -229,6 +232,7 @@ impl AppState {
         Self {
             tabs: vec![initial_tab],
             active_tab_index: 0,
+            show_tabs: false, // Hidden by default with one tab
             task_manager: TaskManager::new(),
             clipboard: Clipboard::new(),
             show_terminal: false,
@@ -244,7 +248,13 @@ impl AppState {
             #[cfg(feature = "mounts")]
             disks_cursor: 0,
             config,
+            info_panel_content: Arc::new(Mutex::new(None)),
+            show_delete_confirmation: None,
         }
+    }
+
+    pub fn toggle_tabs(&mut self) {
+        self.show_tabs = !self.show_tabs;
     }
 
     pub fn get_active_tab_mut(&mut self) -> &mut TabState {
@@ -385,12 +395,16 @@ impl AppState {
     }
 
     pub fn new_tab(&mut self) {
+        if self.tabs.len() >= 10 {
+            return;
+        }
         log::info!("new_tab called. Current tab count: {}", self.tabs.len());
         let new_id = self.tabs.len();
         let mut new_tab = TabState::new(new_id);
         new_tab.update_entries(self.show_hidden_files);
         self.tabs.push(new_tab);
         self.active_tab_index = new_id;
+        self.show_tabs = true; // Show tabs when a new one is created
         log::info!("new_tab finished. New tab count: {}. Active index: {}", self.tabs.len(), self.active_tab_index);
     }
 
@@ -399,6 +413,9 @@ impl AppState {
             self.tabs.remove(self.active_tab_index);
             if self.active_tab_index >= self.tabs.len() {
                 self.active_tab_index = self.tabs.len() - 1;
+            }
+            if self.tabs.len() == 1 {
+                self.show_tabs = false; // Hide tabs when only one is left
             }
         }
     }
@@ -416,6 +433,59 @@ impl AppState {
             if let Err(e) = config::save_config(&self.config) {
                 log::error!("Failed to save config: {}", e);
             }
+        }
+    }
+
+    pub fn clear_info_panel(&mut self) {
+        *self.info_panel_content.lock().unwrap() = None;
+    }
+
+    pub fn refresh_completed_task_dirs(&mut self) {
+        let mut completed_dirs = self.task_manager.completed_and_needs_refresh.lock().unwrap();
+        if completed_dirs.is_empty() {
+            return;
+        }
+
+        let paths_to_refresh: Vec<PathBuf> = completed_dirs.drain(..).collect();
+        let show_hidden = self.show_hidden_files;
+
+        for path in paths_to_refresh {
+            if let Some(parent) = path.parent() {
+                for tab in self.tabs.iter_mut() {
+                    if tab.current_dir == parent {
+                        tab.update_entries(show_hidden);
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn update_info_panel(&mut self) {
+        if let Some(path) = self.get_active_tab().get_selected_entry_path() {
+            let info_panel_content_clone = Arc::clone(&self.info_panel_content);
+            *info_panel_content_clone.lock().unwrap() = Some("Calculating...".to_string());
+
+            tokio::spawn(async move {
+                let mut info_text = vec![];
+                if let Ok(metadata) = fs::metadata(&path) {
+                    if let Ok(created) = metadata.created() {
+                        let datetime: chrono::DateTime<chrono::Local> = created.into();
+                        info_text.push(format!("Created: {}", datetime.format("%Y-%m-%d %H:%M:%S")));
+                    }
+
+                    let size = if metadata.is_dir() {
+                        fs_extra::dir::get_size(&path).unwrap_or(0)
+                    } else {
+                        metadata.len()
+                    };
+                    info_text.push(format!("Size: {} bytes", size));
+
+                    let final_info = info_text.join("\n");
+                    *info_panel_content_clone.lock().unwrap() = Some(final_info);
+                } else {
+                    *info_panel_content_clone.lock().unwrap() = Some("Failed to get info".to_string());
+                }
+            });
         }
     }
 }

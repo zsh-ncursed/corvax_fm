@@ -1,18 +1,21 @@
 use crate::{left_pane, middle_pane, right_pane, top_bar};
 use ratatui::{
-    prelude::{Constraint, Direction, Layout, Rect},
-    widgets::{Block, Borders, List, ListItem},
+    prelude::{Alignment, Constraint, Direction, Layout, Rect},
+    style::{Color, Style},
+    widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap},
     Frame,
 };
 use rtfm_core::app_state::AppState;
+use rtfm_core::clipboard::ClipboardMode;
 
 pub fn render_main_layout(frame: &mut Frame, app_state: &AppState) {
+    let top_bar_height = if app_state.show_tabs { 2 } else { 0 };
     let main_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3), // Top bar
+            Constraint::Length(top_bar_height), // Top bar
             Constraint::Min(0),    // Main content
-            Constraint::Length(1), // Footer
+            Constraint::Length(6), // Footer
         ])
         .split(frame.size());
 
@@ -22,6 +25,13 @@ pub fn render_main_layout(frame: &mut Frame, app_state: &AppState) {
 
     // --- Top Bar (Tabs) ---
     top_bar::render_top_bar(frame, top_bar_area, app_state);
+
+    if let Some(path_to_delete) = &app_state.show_delete_confirmation {
+        let popup_title = "Confirm Deletion";
+        let file_name = path_to_delete.file_name().unwrap_or_default().to_string_lossy();
+        let popup_text = format!("Are you sure you want to delete '{}'? (y/n)", file_name);
+        render_popup(frame, popup_title, &popup_text);
+    }
 
     // --- Main Area (Left, Middle, Right) ---
     let main_horizontal_chunks = Layout::default()
@@ -69,25 +79,17 @@ pub fn render_main_layout(frame: &mut Frame, app_state: &AppState) {
     frame.render_widget(right_pane_block, right_pane_area);
     right_pane::render_right_pane(frame, right_pane_inner_area, active_tab);
 
-    // --- Footer (Terminal, Info) ---
-    if app_state.show_terminal {
-        let footer_chunks = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Percentage(50), // Terminal
-                Constraint::Percentage(50), // Info
-            ])
-            .split(footer_area);
+    // --- Footer (Tasks, Info) ---
+    let footer_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(50), // Tasks
+            Constraint::Percentage(50), // Info
+        ])
+        .split(footer_area);
 
-        frame.render_widget(
-            Block::new().borders(Borders::ALL).title("Terminal"),
-            footer_chunks[0],
-        );
-        render_info_footer(frame, footer_chunks[1], app_state);
-    } else {
-        // If terminal is hidden, info pane takes the whole footer
-        render_info_footer(frame, footer_area, app_state);
-    }
+    render_tasks_footer(frame, footer_chunks[0], app_state);
+    render_info_panel(frame, footer_chunks[1], app_state);
 }
 
 fn render_left_pane(frame: &mut Frame, area: Rect, app_state: &AppState) {
@@ -105,7 +107,7 @@ fn render_left_pane(frame: &mut Frame, area: Rect, app_state: &AppState) {
     left_pane::render_mounts_block(frame, left_chunks[2], app_state);
 }
 
-fn render_info_footer(frame: &mut Frame, area: Rect, app_state: &AppState) {
+fn render_tasks_footer(frame: &mut Frame, area: Rect, app_state: &AppState) {
     let block = Block::default().borders(Borders::ALL).title("Tasks");
     let inner_area = block.inner(area);
     frame.render_widget(block, area);
@@ -119,4 +121,73 @@ fn render_info_footer(frame: &mut Frame, area: Rect, app_state: &AppState) {
     let task_list = List::new(task_items);
 
     frame.render_widget(task_list, inner_area);
+}
+
+fn render_info_panel(frame: &mut Frame, area: Rect, app_state: &AppState) {
+    let block = Block::default().borders(Borders::ALL).title("Info");
+    let inner_area = block.inner(area);
+
+    let content = app_state.info_panel_content.lock().unwrap();
+    let text = if let Some(content) = content.as_ref() {
+        content.clone()
+    } else {
+        String::new()
+    };
+
+    // Always display clipboard info
+    let clipboard = &app_state.clipboard;
+    let clipboard_info = if !clipboard.paths.is_empty() {
+        let mode = match clipboard.mode {
+            Some(ClipboardMode::Copy) => "Copy",
+            Some(ClipboardMode::Move) => "Move",
+            None => "None",
+        };
+        format!("\n\nBuffer: {} files ({})", clipboard.paths.len(), mode)
+    } else {
+        "\n\nBuffer: Empty".to_string()
+    };
+
+    let final_text = format!("{}{}", text, clipboard_info);
+    let paragraph = Paragraph::new(final_text)
+        .wrap(Wrap { trim: true });
+
+    frame.render_widget(paragraph, inner_area);
+    frame.render_widget(block, area);
+}
+
+fn render_popup(frame: &mut Frame, title: &str, text: &str) {
+    let area = centered_rect(60, 20, frame.size());
+    let block = Block::default()
+        .title(title)
+        .borders(Borders::ALL)
+        .style(Style::default().bg(Color::Black));
+
+    let paragraph = Paragraph::new(text)
+        .block(block.clone())
+        .alignment(Alignment::Center)
+        .wrap(Wrap { trim: true });
+
+    frame.render_widget(Clear, area); //this clears the background
+    frame.render_widget(paragraph, area);
+}
+
+/// helper function to create a centered rect using up certain percentage of the available rect `r`
+fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(r);
+
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(popup_layout[1])[1]
 }

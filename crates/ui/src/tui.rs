@@ -34,6 +34,7 @@ impl Tui {
         loop {
             app_state.task_manager.process_pending_tasks();
             app_state.task_manager.update_task_statuses();
+            app_state.refresh_completed_task_dirs();
 
             self.terminal.draw(|frame| {
                 layout::render_main_layout(frame, app_state);
@@ -55,6 +56,23 @@ impl Tui {
 
 /// Handles key presses and returns `false` if the app should quit.
 fn handle_key_press(key: KeyEvent, app_state: &mut AppState) -> bool {
+    if app_state.show_delete_confirmation.is_some() {
+        match key.code {
+            KeyCode::Char('y') => {
+                if let Some(path) = app_state.show_delete_confirmation.take() {
+                    let description = format!("Delete {}", path.display());
+                    app_state.task_manager.add_task(rtfm_core::task_manager::TaskKind::Delete { path }, description);
+                }
+                return true;
+            }
+            KeyCode::Char('n') | KeyCode::Esc => {
+                app_state.show_delete_confirmation = None;
+                return true;
+            }
+            _ => {}
+        }
+    }
+
     // Global keybindings
     if key.modifiers.contains(KeyModifiers::CONTROL) {
         match key.code {
@@ -87,12 +105,19 @@ fn handle_key_press(key: KeyEvent, app_state: &mut AppState) -> bool {
 
     // Alt-number for tab switching
     if key.modifiers.contains(KeyModifiers::ALT) {
-        if let KeyCode::Char(c @ '1'..='9') = key.code {
-            let tab_index = c.to_digit(10).unwrap_or(0) as usize;
-            if tab_index > 0 && tab_index <= app_state.tabs.len() {
-                app_state.active_tab_index = tab_index - 1;
+        match key.code {
+            KeyCode::Char(c @ '1'..='9') => {
+                let tab_index = c.to_digit(10).unwrap_or(0) as usize;
+                if tab_index > 0 && tab_index <= app_state.tabs.len() {
+                    app_state.active_tab_index = tab_index - 1;
+                }
+                return true;
             }
-            return true;
+            KeyCode::Char('t') => {
+                app_state.toggle_tabs();
+                return true;
+            }
+            _ => {}
         }
     }
     // crossterm might send BackTab for Shift-Tab
@@ -106,6 +131,7 @@ fn handle_key_press(key: KeyEvent, app_state: &mut AppState) -> bool {
     use rtfm_core::app_state::FocusBlock;
     match key.code {
         KeyCode::Char('q') => return false, // Signal to quit
+        KeyCode::Char('i') => app_state.update_info_panel(),
         KeyCode::Tab => app_state.cycle_focus(),
         KeyCode::Char('.') => app_state.toggle_hidden_files(),
         KeyCode::Char('j') | KeyCode::Down => {
@@ -113,8 +139,12 @@ fn handle_key_press(key: KeyEvent, app_state: &mut AppState) -> bool {
                 FocusBlock::Middle => {
                     let show_hidden = app_state.show_hidden_files;
                     app_state.get_active_tab_mut().move_cursor_down(show_hidden);
+                    app_state.clear_info_panel();
                 },
-                _ => app_state.move_left_pane_cursor_down(),
+                _ => {
+                    app_state.move_left_pane_cursor_down();
+                    app_state.clear_info_panel();
+                }
             }
         },
         KeyCode::Char('k') | KeyCode::Up => {
@@ -122,24 +152,35 @@ fn handle_key_press(key: KeyEvent, app_state: &mut AppState) -> bool {
                 FocusBlock::Middle => {
                     let show_hidden = app_state.show_hidden_files;
                     app_state.get_active_tab_mut().move_cursor_up(show_hidden);
+                    app_state.clear_info_panel();
                 },
-                _ => app_state.move_left_pane_cursor_up(),
+                _ => {
+                    app_state.move_left_pane_cursor_up();
+                    app_state.clear_info_panel();
+                }
             }
         },
         KeyCode::Char('h') | KeyCode::Left => {
             if app_state.focus == FocusBlock::Middle {
                 let show_hidden = app_state.show_hidden_files;
                 app_state.get_active_tab_mut().leave_directory(show_hidden);
+                app_state.clear_info_panel();
             }
         },
         KeyCode::Char('l') | KeyCode::Right | KeyCode::Enter => {
             if app_state.focus == FocusBlock::Middle {
                 let show_hidden = app_state.show_hidden_files;
                 app_state.get_active_tab_mut().enter_directory(show_hidden);
+                app_state.clear_info_panel();
             }
         },
+        KeyCode::Char('x') => app_state.cut_selection(),
         KeyCode::Char('y') => app_state.yank_selection(),
-        KeyCode::Char('d') => app_state.cut_selection(),
+        KeyCode::Char('d') => {
+            if let Some(path) = app_state.get_active_tab().get_selected_entry_path() {
+                app_state.show_delete_confirmation = Some(path);
+            }
+        },
         KeyCode::Char('p') => app_state.paste(),
         KeyCode::Char('m') => app_state.add_bookmark(),
         _ => {}
