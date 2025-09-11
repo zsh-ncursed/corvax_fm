@@ -5,8 +5,25 @@ use ratatui::{
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap},
     Frame,
 };
-use rtfm_core::app_state::AppState;
+use rtfm_core::app_state::{AppState, CreateFileType};
 use rtfm_core::clipboard::ClipboardMode;
+
+fn render_input_dialog(frame: &mut Frame, app_state: &AppState) {
+    let file_type = match app_state.create_file_type {
+        Some(CreateFileType::File) => "file",
+        Some(CreateFileType::Directory) => "directory",
+        None => "",
+    };
+    let title = format!("Create new {}", file_type);
+    let text = Paragraph::new(app_state.input_buffer.as_str())
+        .block(Block::default().title(title).borders(Borders::ALL))
+        .style(Style::default().fg(Color::Yellow));
+
+    // Center the dialog
+    let area = centered_rect(50, 20, frame.size());
+    frame.render_widget(Clear, area); //this clears the background
+    frame.render_widget(text, area);
+}
 
 fn render_confirmation_dialog(frame: &mut Frame, app_state: &AppState) {
     let message = &app_state.confirmation_message;
@@ -120,6 +137,9 @@ pub fn render_main_layout(frame: &mut Frame, app_state: &AppState) {
 
     if app_state.show_confirmation {
         render_confirmation_dialog(frame, app_state);
+    }
+    if app_state.show_input_dialog {
+        render_input_dialog(frame, app_state);
     }
 }
 
