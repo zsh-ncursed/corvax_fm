@@ -1,11 +1,46 @@
 use crate::{left_pane, middle_pane, right_pane, top_bar};
 use ratatui::{
     prelude::{Constraint, Direction, Layout, Rect},
-    widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
+    style::{Color, Style},
+    widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap},
     Frame,
 };
 use rtfm_core::app_state::AppState;
 use rtfm_core::clipboard::ClipboardMode;
+
+fn render_confirmation_dialog(frame: &mut Frame, app_state: &AppState) {
+    let message = &app_state.confirmation_message;
+    let text = Paragraph::new(message.as_str())
+        .block(Block::default().title("Confirmation").borders(Borders::ALL))
+        .style(Style::default().fg(Color::Yellow));
+
+    // Center the dialog
+    let area = centered_rect(50, 20, frame.size());
+    frame.render_widget(Clear, area); //this clears the background
+    frame.render_widget(text, area);
+}
+
+/// helper function to create a centered rect using up certain percentage of the available rect `r`
+fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(r);
+
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(popup_layout[1])[1]
+}
+
 
 pub fn render_main_layout(frame: &mut Frame, app_state: &AppState) {
     let top_bar_height = if app_state.show_tabs { 2 } else { 0 };
@@ -82,6 +117,10 @@ pub fn render_main_layout(frame: &mut Frame, app_state: &AppState) {
 
     render_tasks_footer(frame, footer_chunks[0], app_state);
     render_info_panel(frame, footer_chunks[1], app_state);
+
+    if app_state.show_confirmation {
+        render_confirmation_dialog(frame, app_state);
+    }
 }
 
 fn render_left_pane(frame: &mut Frame, area: Rect, app_state: &AppState) {
