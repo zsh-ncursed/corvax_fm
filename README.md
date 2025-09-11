@@ -23,13 +23,6 @@
 ### Prerequisites
 
 *   Rust toolchain (https://rustup.rs/)
-*   **Build Tools**:
-    *   **clang**: Required to generate FFI bindings.
-        *   **Arch Linux:** `sudo pacman -S clang`
-        *   **Debian/Ubuntu:** `sudo apt-get install libclang-dev`
-*   **libmupdf**: This is required for image and PDF rendering.
-    *   **Arch Linux:** `sudo pacman -S mupdf`
-    *   **Debian/Ubuntu:** `sudo apt-get install libmupdf-dev` and its dependencies (`libjpeg-dev`, `libopenjp2-7-dev`, etc.)
 
 ### Building
 
