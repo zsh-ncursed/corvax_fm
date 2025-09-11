@@ -33,7 +33,10 @@ impl Tui {
     pub async fn main_loop(&mut self, app_state: &mut AppState) -> io::Result<()> {
         loop {
             app_state.task_manager.process_pending_tasks();
-            app_state.task_manager.update_task_statuses();
+            if app_state.task_manager.update_task_statuses() {
+                let show_hidden = app_state.show_hidden_files;
+                app_state.get_active_tab_mut().update_entries(show_hidden);
+            }
 
             self.terminal.draw(|frame| {
                 layout::render_main_layout(frame, app_state);
@@ -109,6 +112,20 @@ fn handle_key_press(key: KeyEvent, app_state: &mut AppState) -> bool {
     }
 
 
+    if app_state.show_confirmation {
+        match key.code {
+            KeyCode::Char('y') => {
+                app_state.confirm_delete();
+                return true;
+            }
+            KeyCode::Char('n') | KeyCode::Esc => {
+                app_state.cancel_delete();
+                return true;
+            }
+            _ => {}
+        }
+    }
+
     // Normal mode keybindings
     use rtfm_core::app_state::FocusBlock;
     match key.code {
@@ -157,7 +174,8 @@ fn handle_key_press(key: KeyEvent, app_state: &mut AppState) -> bool {
             }
         },
         KeyCode::Char('y') => app_state.yank_selection(),
-        KeyCode::Char('d') => app_state.cut_selection(),
+        KeyCode::Char('x') => app_state.cut_selection(),
+        KeyCode::Char('d') => app_state.delete_selection(),
         KeyCode::Char('p') => app_state.paste(),
         KeyCode::Char('m') => app_state.add_bookmark(),
         _ => {}

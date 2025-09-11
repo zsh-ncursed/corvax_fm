@@ -183,6 +183,9 @@ pub struct AppState {
     pub config: Config,
     pub plugin_manager: PluginManager,
     pub info_panel_content: Arc<Mutex<Option<String>>>,
+    pub show_confirmation: bool,
+    pub confirmation_message: String,
+    pub path_to_delete: Option<PathBuf>,
 }
 
 impl AppState {
@@ -248,6 +251,9 @@ impl AppState {
             disks_cursor: 0,
             config,
             info_panel_content: Arc::new(Mutex::new(None)),
+            show_confirmation: false,
+            confirmation_message: String::new(),
+            path_to_delete: None,
         }
     }
 
@@ -465,5 +471,28 @@ impl AppState {
                 }
             });
         }
+    }
+
+    pub fn delete_selection(&mut self) {
+        if let Some(path) = self.get_active_tab().get_selected_entry_path() {
+            self.path_to_delete = Some(path.clone());
+            self.confirmation_message = format!("Are you sure you want to delete {:?}? (y/n)", path.file_name().unwrap());
+            self.show_confirmation = true;
+        }
+    }
+
+    pub fn confirm_delete(&mut self) {
+        if let Some(path) = self.path_to_delete.take() {
+            let description = format!("Delete {:?}", path.file_name().unwrap());
+            let task_kind = TaskKind::Delete { path };
+            self.task_manager.add_task(task_kind, description);
+        }
+        self.show_confirmation = false;
+        self.path_to_delete = None;
+    }
+
+    pub fn cancel_delete(&mut self) {
+        self.show_confirmation = false;
+        self.path_to_delete = None;
     }
 }
