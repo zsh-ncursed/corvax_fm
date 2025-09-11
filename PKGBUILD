@@ -7,7 +7,6 @@ arch=('x86_64')
 url="https://github.com/user/rust-tui-fm" # Placeholder URL
 license=('MIT')
 depends=('mupdf')
-makedepends=('rustup')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
 sha256sums=('SKIP') # In a real scenario, this would be the checksum of the source tarball
 

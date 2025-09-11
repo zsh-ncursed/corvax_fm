@@ -23,9 +23,6 @@
 ### Prerequisites
 
 *   Rust toolchain (https://rustup.rs/)
-*   **libmupdf**: This is required for image and PDF rendering.
-    *   **Arch Linux:** `sudo pacman -S mupdf`
-    *   **Debian/Ubuntu:** `sudo apt-get install libmupdf-dev`
 
 ### Building
 
