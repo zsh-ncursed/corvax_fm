@@ -9,6 +9,8 @@ pub enum TaskKind {
     Copy { src: PathBuf, dest: PathBuf },
     Move { src: PathBuf, dest: PathBuf },
     Delete { path: PathBuf },
+    CreateFile { path: PathBuf },
+    CreateDirectory { path: PathBuf },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -93,6 +95,12 @@ impl TaskManager {
                         }
                         TaskKind::Delete { path } => {
                             fs_ops::delete_item_task(task_id, path, progress_tx).await;
+                        }
+                        TaskKind::CreateFile { path } => {
+                            fs_ops::create_file_task(task_id, path, progress_tx).await;
+                        }
+                        TaskKind::CreateDirectory { path } => {
+                            fs_ops::create_directory_task(task_id, path, progress_tx).await;
                         }
                     }
                 });

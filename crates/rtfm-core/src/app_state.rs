@@ -19,6 +19,18 @@ pub enum FocusBlock {
     Disks,
     Middle,
 }
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum InputMode {
+    Normal,
+    Create,
+}
+
+#[derive(Debug, Clone)]
+pub enum CreateFileType {
+    File,
+    Directory,
+}
 #[derive(Debug, Clone)]
 pub struct DirEntry {
     pub name: String,
@@ -186,6 +198,10 @@ pub struct AppState {
     pub show_confirmation: bool,
     pub confirmation_message: String,
     pub path_to_delete: Option<PathBuf>,
+    pub input_mode: InputMode,
+    pub input_buffer: String,
+    pub show_input_dialog: bool,
+    pub create_file_type: Option<CreateFileType>,
 }
 
 impl AppState {
@@ -254,6 +270,10 @@ impl AppState {
             show_confirmation: false,
             confirmation_message: String::new(),
             path_to_delete: None,
+            input_mode: InputMode::Normal,
+            input_buffer: String::new(),
+            show_input_dialog: false,
+            create_file_type: None,
         }
     }
 
@@ -494,5 +514,31 @@ impl AppState {
     pub fn cancel_delete(&mut self) {
         self.show_confirmation = false;
         self.path_to_delete = None;
+    }
+
+    pub fn create_item(&mut self) {
+        if self.input_buffer.is_empty() {
+            return;
+        }
+
+        let new_item_name = self.input_buffer.clone();
+        self.input_buffer.clear();
+
+        let current_dir = self.get_active_tab().current_dir.clone();
+        let new_item_path = current_dir.join(new_item_name);
+
+        let task_kind = match self.create_file_type.as_ref().unwrap() {
+            CreateFileType::File => TaskKind::CreateFile {
+                path: new_item_path.clone(),
+            },
+            CreateFileType::Directory => TaskKind::CreateDirectory {
+                path: new_item_path.clone(),
+            },
+        };
+
+        let description = format!("Create {:?}", new_item_path);
+        self.task_manager.add_task(task_kind, description);
+
+        self.create_file_type = None;
     }
 }
