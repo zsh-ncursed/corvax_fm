@@ -48,13 +48,18 @@ pub fn render_right_pane(frame: &mut Frame, area: Rect, tab_state: &TabState) {
             let list = List::new(items);
             frame.render_widget(list, area);
         }
+        PreviewState::Image(_) => {
+            // Placeholder for now. Image drawing will be handled by a backend.
+            let paragraph = Paragraph::new("Image preview...");
+            frame.render_widget(paragraph, area);
+        }
         _ => {
             let content = match &*preview_state {
                 PreviewState::Empty => "Empty",
                 PreviewState::Loading => "Loading...",
                 PreviewState::Text(text) => text,
                 PreviewState::Error(e) => e,
-                PreviewState::Directory(_) => unreachable!(),
+                PreviewState::Directory(_) | PreviewState::Image(_) => unreachable!(),
             };
             let paragraph = Paragraph::new(content);
             frame.render_widget(paragraph, area);

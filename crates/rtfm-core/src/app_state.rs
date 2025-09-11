@@ -4,7 +4,6 @@ use crate::task_manager::{TaskManager, TaskKind};
 use crate::clipboard::{Clipboard, ClipboardMode};
 use crate::preview::PreviewState;
 use std::sync::{Arc, Mutex};
-use io::fs_ops;
 use directories::UserDirs;
 use config::Config;
 use log;
@@ -126,50 +125,10 @@ impl TabState {
         self.entries.get(self.cursor).map(|e| e.path.clone())
     }
 
-    pub fn update_preview(&self, show_hidden: bool) {
-        let preview_state_clone = Arc::clone(&self.preview_state);
-
-        if let Some(path) = self.get_selected_entry_path() {
-            *preview_state_clone.lock().unwrap() = PreviewState::Loading;
-
-            if path.is_dir() {
-                // This is a temporary synchronous implementation for simplicity.
-                // A better implementation would use tokio::spawn_blocking.
-                let entries = match fs::read_dir(&path) {
-                    Ok(entries) => entries
-                        .filter_map(|res| res.ok())
-                        .filter(|entry| {
-                            if show_hidden {
-                                true
-                            } else {
-                                !entry.file_name().to_string_lossy().starts_with('.')
-                            }
-                        })
-                        .map(|entry| {
-                            let path = entry.path();
-                            let is_dir = path.is_dir();
-                            let name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
-                            DirEntry { name, path, is_dir }
-                        })
-                        .collect(),
-                    Err(e) => {
-                        *preview_state_clone.lock().unwrap() = PreviewState::Error(e.to_string());
-                        return;
-                    }
-                };
-                *preview_state_clone.lock().unwrap() = PreviewState::Directory(entries);
-            } else {
-                tokio::spawn(async move {
-                    let result = fs_ops::load_text_preview(path).await;
-                    *preview_state_clone.lock().unwrap() = match result {
-                        Ok(text) => PreviewState::Text(text),
-                        Err(e) => PreviewState::Error(e),
-                    };
-                });
-            }
-        } else {
-            *preview_state_clone.lock().unwrap() = PreviewState::Empty;
-        }
+    pub fn update_preview(&self, _show_hidden: bool) {
+        // This method is now a no-op. Preview is handled by the PreviewController.
+        // We could set the state to Loading here, but it's better to do it
+        // right before we send the request to the controller.
     }
 }
 
