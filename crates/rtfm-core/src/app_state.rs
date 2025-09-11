@@ -19,6 +19,19 @@ pub enum FocusBlock {
     Disks,
     Middle,
 }
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum InputMode {
+    Normal,
+    Waiting,
+    TextInput,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum CreationMode {
+    File,
+    Directory,
+}
 #[derive(Debug, Clone)]
 pub struct DirEntry {
     pub name: String,
@@ -183,6 +196,12 @@ pub struct AppState {
     pub config: Config,
     pub plugin_manager: PluginManager,
     pub info_panel_content: Arc<Mutex<Option<String>>>,
+    pub show_confirmation: bool,
+    pub confirmation_message: String,
+    pub path_to_delete: Option<PathBuf>,
+    pub input_mode: InputMode,
+    pub creation_mode: Option<CreationMode>,
+    pub text_input: String,
 }
 
 impl AppState {
@@ -248,6 +267,12 @@ impl AppState {
             disks_cursor: 0,
             config,
             info_panel_content: Arc::new(Mutex::new(None)),
+            show_confirmation: false,
+            confirmation_message: String::new(),
+            path_to_delete: None,
+            input_mode: InputMode::Normal,
+            creation_mode: None,
+            text_input: String::new(),
         }
     }
 
@@ -465,5 +490,60 @@ impl AppState {
                 }
             });
         }
+    }
+
+    pub fn delete_selection(&mut self) {
+        if let Some(path) = self.get_active_tab().get_selected_entry_path() {
+            self.path_to_delete = Some(path.clone());
+            self.confirmation_message = format!("Are you sure you want to delete {:?}? (y/n)", path.file_name().unwrap());
+            self.show_confirmation = true;
+        }
+    }
+
+    pub fn confirm_delete(&mut self) {
+        if let Some(path) = self.path_to_delete.take() {
+            let description = format!("Delete {:?}", path.file_name().unwrap());
+            let task_kind = TaskKind::Delete { path };
+            self.task_manager.add_task(task_kind, description);
+        }
+        self.show_confirmation = false;
+        self.path_to_delete = None;
+    }
+
+    pub fn cancel_delete(&mut self) {
+        self.show_confirmation = false;
+        self.path_to_delete = None;
+    }
+
+    pub fn create_item(&mut self) {
+        if self.text_input.is_empty() {
+            self.creation_mode = None;
+            return;
+        }
+
+        let new_name = self.text_input.clone();
+        let current_dir = self.get_active_tab().current_dir.clone();
+        let new_path = current_dir.join(new_name);
+
+        let (task_kind, description) = match self.creation_mode {
+            Some(CreationMode::Directory) => {
+                let description = format!("Create directory {}", self.text_input);
+                (TaskKind::CreateDirectory { path: new_path }, description)
+            }
+            Some(CreationMode::File) => {
+                let description = format!("Create file {}", self.text_input);
+                (TaskKind::CreateFile { path: new_path }, description)
+            }
+            None => {
+                // Should not happen
+                self.text_input.clear();
+                self.creation_mode = None;
+                return;
+            }
+        };
+
+        self.task_manager.add_task(task_kind, description);
+        self.text_input.clear();
+        self.creation_mode = None;
     }
 }

@@ -6,7 +6,7 @@ use crossterm::{
 use ratatui::prelude::{CrosstermBackend, Terminal};
 use std::io::{self, stdout, Stdout};
 use crate::layout;
-use rtfm_core::app_state::AppState;
+use rtfm_core::app_state::{AppState, InputMode, CreationMode};
 
 pub struct Tui {
     terminal: Terminal<CrosstermBackend<Stdout>>,
@@ -33,7 +33,10 @@ impl Tui {
     pub async fn main_loop(&mut self, app_state: &mut AppState) -> io::Result<()> {
         loop {
             app_state.task_manager.process_pending_tasks();
-            app_state.task_manager.update_task_statuses();
+            if app_state.task_manager.update_task_statuses() {
+                let show_hidden = app_state.show_hidden_files;
+                app_state.get_active_tab_mut().update_entries(show_hidden);
+            }
 
             self.terminal.draw(|frame| {
                 layout::render_main_layout(frame, app_state);
@@ -55,6 +58,14 @@ impl Tui {
 
 /// Handles key presses and returns `false` if the app should quit.
 fn handle_key_press(key: KeyEvent, app_state: &mut AppState) -> bool {
+    match app_state.input_mode {
+        InputMode::Normal => handle_normal_mode(key, app_state),
+        InputMode::Waiting => handle_waiting_mode(key, app_state),
+        InputMode::TextInput => handle_text_input_mode(key, app_state),
+    }
+}
+
+fn handle_normal_mode(key: KeyEvent, app_state: &mut AppState) -> bool {
     // Global keybindings
     if key.modifiers.contains(KeyModifiers::CONTROL) {
         match key.code {
@@ -109,10 +120,25 @@ fn handle_key_press(key: KeyEvent, app_state: &mut AppState) -> bool {
     }
 
 
+    if app_state.show_confirmation {
+        match key.code {
+            KeyCode::Char('y') => {
+                app_state.confirm_delete();
+                return true;
+            }
+            KeyCode::Char('n') | KeyCode::Esc => {
+                app_state.cancel_delete();
+                return true;
+            }
+            _ => {}
+        }
+    }
+
     // Normal mode keybindings
     use rtfm_core::app_state::FocusBlock;
     match key.code {
         KeyCode::Char('q') => return false, // Signal to quit
+        KeyCode::Char('n') => app_state.input_mode = InputMode::Waiting,
         KeyCode::Char('i') => app_state.update_info_panel(),
         KeyCode::Tab => app_state.cycle_focus(),
         KeyCode::Char('.') => app_state.toggle_hidden_files(),
@@ -157,9 +183,48 @@ fn handle_key_press(key: KeyEvent, app_state: &mut AppState) -> bool {
             }
         },
         KeyCode::Char('y') => app_state.yank_selection(),
-        KeyCode::Char('d') => app_state.cut_selection(),
+        KeyCode::Char('x') => app_state.cut_selection(),
+        KeyCode::Char('d') => app_state.delete_selection(),
         KeyCode::Char('p') => app_state.paste(),
         KeyCode::Char('m') => app_state.add_bookmark(),
+        _ => {}
+    }
+    true
+}
+
+fn handle_waiting_mode(key: KeyEvent, app_state: &mut AppState) -> bool {
+    match key.code {
+        KeyCode::Char('d') => {
+            app_state.creation_mode = Some(CreationMode::Directory);
+            app_state.input_mode = InputMode::TextInput;
+        }
+        KeyCode::Char('f') => {
+            app_state.creation_mode = Some(CreationMode::File);
+            app_state.input_mode = InputMode::TextInput;
+        }
+        _ => {
+            app_state.input_mode = InputMode::Normal;
+        }
+    }
+    true
+}
+
+fn handle_text_input_mode(key: KeyEvent, app_state: &mut AppState) -> bool {
+    match key.code {
+        KeyCode::Char(c) => {
+            app_state.text_input.push(c);
+        }
+        KeyCode::Backspace => {
+            app_state.text_input.pop();
+        }
+        KeyCode::Enter => {
+            app_state.create_item();
+            app_state.input_mode = InputMode::Normal;
+        }
+        KeyCode::Esc => {
+            app_state.text_input.clear();
+            app_state.input_mode = InputMode::Normal;
+        }
         _ => {}
     }
     true

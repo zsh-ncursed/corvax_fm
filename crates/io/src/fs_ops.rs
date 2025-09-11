@@ -27,6 +27,59 @@ pub async fn copy_file_task(
     }
 }
 
+pub async fn create_directory_task(
+    task_id: Uuid,
+    path: PathBuf,
+    progress_tx: mpsc::Sender<(Uuid, ProgressEvent)>,
+) {
+    let result = fs::create_dir(&path).await;
+    match result {
+        Ok(_) => {
+            let _ = progress_tx.send((task_id, ProgressEvent::Completed)).await;
+        }
+        Err(e) => {
+            let _ = progress_tx.send((task_id, ProgressEvent::Error(e.to_string()))).await;
+        }
+    }
+}
+
+pub async fn create_file_task(
+    task_id: Uuid,
+    path: PathBuf,
+    progress_tx: mpsc::Sender<(Uuid, ProgressEvent)>,
+) {
+    let result = fs::File::create(&path).await;
+    match result {
+        Ok(_) => {
+            let _ = progress_tx.send((task_id, ProgressEvent::Completed)).await;
+        }
+        Err(e) => {
+            let _ = progress_tx.send((task_id, ProgressEvent::Error(e.to_string()))).await;
+        }
+    }
+}
+
+pub async fn delete_item_task(
+    task_id: Uuid,
+    path: PathBuf,
+    progress_tx: mpsc::Sender<(Uuid, ProgressEvent)>,
+) {
+    let result = if path.is_dir() {
+        fs::remove_dir_all(&path).await
+    } else {
+        fs::remove_file(&path).await
+    };
+
+    match result {
+        Ok(_) => {
+            let _ = progress_tx.send((task_id, ProgressEvent::Completed)).await;
+        }
+        Err(e) => {
+            let _ = progress_tx.send((task_id, ProgressEvent::Error(e.to_string()))).await;
+        }
+    }
+}
+
 pub async fn move_item_task(
     task_id: Uuid,
     src: PathBuf,

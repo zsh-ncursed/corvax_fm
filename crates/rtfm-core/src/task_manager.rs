@@ -9,6 +9,8 @@ pub enum TaskKind {
     Copy { src: PathBuf, dest: PathBuf },
     Move { src: PathBuf, dest: PathBuf },
     Delete { path: PathBuf },
+    CreateDirectory { path: PathBuf },
+    CreateFile { path: PathBuf },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -91,8 +93,14 @@ impl TaskManager {
                         TaskKind::Move { src, dest } => {
                             fs_ops::move_item_task(task_id, src, dest, progress_tx).await;
                         }
-                        _ => {
-                            // Placeholder for other task kinds
+                        TaskKind::Delete { path } => {
+                            fs_ops::delete_item_task(task_id, path, progress_tx).await;
+                        }
+                        TaskKind::CreateDirectory { path } => {
+                            fs_ops::create_directory_task(task_id, path, progress_tx).await;
+                        }
+                        TaskKind::CreateFile { path } => {
+                            fs_ops::create_file_task(task_id, path, progress_tx).await;
                         }
                     }
                 });
@@ -100,18 +108,26 @@ impl TaskManager {
         }
     }
 
-    pub fn update_task_statuses(&self) {
+    pub fn update_task_statuses(&self) -> bool {
+        let mut completed_or_failed = false;
         let mut rx = self.progress_rx.lock().unwrap();
         while let Ok((task_id, event)) = rx.try_recv() {
             let mut tasks = self.tasks.lock().unwrap();
             if let Some(task) = tasks.iter_mut().find(|t| t.id == task_id) {
                 match event {
-                    fs_ops::ProgressEvent::Completed => task.status = TaskStatus::Completed,
-                    fs_ops::ProgressEvent::Error(e) => task.status = TaskStatus::Failed(e),
+                    fs_ops::ProgressEvent::Completed => {
+                        task.status = TaskStatus::Completed;
+                        completed_or_failed = true;
+                    }
+                    fs_ops::ProgressEvent::Error(e) => {
+                        task.status = TaskStatus::Failed(e);
+                        completed_or_failed = true;
+                    }
                     fs_ops::ProgressEvent::Update(p) => task.status = TaskStatus::InProgress(p),
                 }
             }
         }
+        completed_or_failed
     }
 }
 
