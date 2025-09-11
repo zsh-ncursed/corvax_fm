@@ -9,8 +9,14 @@ ui = { path = "../ui", features = ["mounts"] }
 io = { path = "../io" }
 config = { path = "../config" }
 utils = { path = "../utils" }
+output-backends = { path = "../output-backends" }
+raster = { path = "../raster" }
 
 tokio = { workspace = true }
+crossterm = { workspace = true }
+ratatui = { workspace = true }
+anyhow = "1.0"
+futures = "0.3"
 log = { workspace = true }
 fern = { workspace = true }
 chrono = { version = "0.4", features = ["serde"] }
