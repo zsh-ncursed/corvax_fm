@@ -10,6 +10,9 @@
     *   **Left Pane:** Quick access to XDG user folders, bookmarks, and mounted devices.
     *   **Middle Pane:** Main file list with support for sorting and filtering.
     *   **Right Pane:** Asynchronous preview for text files.
+*   **Asynchronous Previews:** Previews for images (PNG, JPEG, etc.) and PDF documents are rendered asynchronously.
+    *   **Progressive Rendering:** A low-resolution thumbnail is shown almost instantly, which is then replaced by the full-resolution version.
+    *   **Backend Support:** Currently supports the Kitty graphics protocol.
 *   **Asynchronous Operations:** File operations (copy, move, delete) are handled in the background, keeping the UI responsive.
 *   **Tabbed Interface:** Manage multiple directories with tabs.
 *   **Extensible:** A plugin system (work in progress) allows for new functionality to be added.
@@ -20,6 +23,9 @@
 ### Prerequisites
 
 *   Rust toolchain (https://rustup.rs/)
+*   **libmupdf**: This is required for image and PDF rendering.
+    *   **Arch Linux:** `sudo pacman -S mupdf`
+    *   **Debian/Ubuntu:** `sudo apt-get install libmupdf-dev`
 
 ### Building
 
@@ -72,4 +78,13 @@ Example `config.toml`:
 [bookmarks]
 dotfiles = "~/.dotfiles"
 projects = "~/dev/projects"
+
+# Preview settings
+[preview]
+# Backend for image previews. "Kitty" is currently supported.
+backend = "Kitty"
+# Whether to use progressive rendering (low-res placeholder -> high-res final).
+progressive = true
+# Maximum resolution for rendered previews.
+resolution = { width = 800, height = 600 }
 ```

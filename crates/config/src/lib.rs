@@ -4,6 +4,40 @@ use std::fs;
 use std::path::PathBuf;
 use directories::ProjectDirs;
 
+#[derive(Debug, Deserialize, Serialize, Clone, Copy)]
+pub enum BackendType {
+    Kitty,
+    // Sixel, // Will be added back later
+}
+
+impl Default for BackendType {
+    fn default() -> Self {
+        BackendType::Kitty
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, Copy)]
+pub struct Resolution {
+    pub width: u32,
+    pub height: u32,
+}
+
+impl Default for Resolution {
+    fn default() -> Self {
+        Self { width: 800, height: 600 }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, Copy, Default)]
+pub struct PreviewConfig {
+    #[serde(default)]
+    pub backend: BackendType,
+    #[serde(default)]
+    pub progressive: bool,
+    #[serde(default)]
+    pub resolution: Resolution,
+}
+
 #[derive(Debug, Deserialize, Serialize, Default)]
 pub struct Config {
     #[serde(default)]
@@ -12,6 +46,8 @@ pub struct Config {
     pub theme: Theme,
     #[serde(default)]
     pub bookmarks: HashMap<String, PathBuf>,
+    #[serde(default)]
+    pub preview: PreviewConfig,
 }
 
 #[derive(Debug, Deserialize, Serialize, Default)]

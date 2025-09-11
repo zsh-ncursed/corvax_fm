@@ -1,15 +1,14 @@
 use crossterm::{
-    event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
+    event::{KeyCode, KeyEvent, KeyModifiers},
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
 };
-use ratatui::prelude::{CrosstermBackend, Terminal};
+use ratatui::prelude::{CrosstermBackend, Terminal, Rect, Layout, Direction, Constraint};
 use std::io::{self, stdout, Stdout};
-use crate::layout;
 use rtfm_core::app_state::{AppState, InputMode, CreateFileType};
 
 pub struct Tui {
-    terminal: Terminal<CrosstermBackend<Stdout>>,
+    pub terminal: Terminal<CrosstermBackend<Stdout>>,
 }
 
 impl Tui {
@@ -30,34 +29,44 @@ impl Tui {
         Ok(())
     }
 
-    pub async fn main_loop(&mut self, app_state: &mut AppState) -> io::Result<()> {
-        loop {
-            app_state.task_manager.process_pending_tasks();
-            if app_state.task_manager.update_task_statuses() {
-                let show_hidden = app_state.show_hidden_files;
-                app_state.get_active_tab_mut().update_entries(show_hidden);
-            }
+    pub fn get_right_pane_area(&self, app_state: &AppState) -> Rect {
+        let frame_size = self.terminal.size().unwrap_or_default();
+        let top_bar_height = if app_state.show_tabs { 2 } else { 0 };
+        let main_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(top_bar_height),
+                Constraint::Min(0),
+                Constraint::Length(6),
+            ])
+            .split(frame_size);
 
-            self.terminal.draw(|frame| {
-                layout::render_main_layout(frame, app_state);
-            })?;
+        let main_area = main_chunks[1];
 
-            if event::poll(std::time::Duration::from_millis(16))? {
-                if let Event::Key(key) = event::read()? {
-                    if key.kind == KeyEventKind::Press {
-                        if !handle_key_press(key, app_state) {
-                            break; // Quit signal received
-                        }
-                    }
-                }
-            }
-        }
-        Ok(())
+        let main_horizontal_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Percentage(20),
+                Constraint::Percentage(80),
+            ])
+            .split(main_area);
+
+        let middle_right_area = main_horizontal_chunks[1];
+
+        let middle_right_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Percentage(55),
+                Constraint::Percentage(45),
+            ])
+            .split(middle_right_area);
+
+        middle_right_chunks[1] // This is the right_pane_area
     }
 }
 
 /// Handles key presses and returns `false` if the app should quit.
-fn handle_key_press(key: KeyEvent, app_state: &mut AppState) -> bool {
+pub fn handle_key_press(key: KeyEvent, app_state: &mut AppState) -> bool {
     // Global keybindings
     if key.modifiers.contains(KeyModifiers::CONTROL) {
         match key.code {
