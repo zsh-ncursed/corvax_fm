@@ -1,4 +1,4 @@
-use crate::{left_pane, middle_pane, right_pane, top_bar};
+use crate::{left_pane, middle_pane, top_bar};
 use ratatui::{
     prelude::{Constraint, Direction, Layout, Rect},
     style::{Color, Style},
@@ -77,28 +77,17 @@ pub fn render_main_layout(frame: &mut Frame, app_state: &AppState) {
     // --- Top Bar (Tabs) ---
     top_bar::render_top_bar(frame, top_bar_area, app_state);
 
-    // --- Main Area (Left, Middle, Right) ---
+    // --- Main Area (Left, Middle) ---
     let main_horizontal_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
             Constraint::Percentage(20), // Left
-            Constraint::Percentage(80), // Middle + Right
+            Constraint::Percentage(80), // Middle
         ])
         .split(main_area);
 
     let left_pane_area = main_horizontal_chunks[0];
-    let middle_right_area = main_horizontal_chunks[1];
-
-    let middle_right_chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage(55), // Middle
-            Constraint::Percentage(45), // Right
-        ])
-        .split(middle_right_area);
-
-    let middle_pane_area = middle_right_chunks[0];
-    let right_pane_area = middle_right_chunks[1];
+    let middle_pane_area = main_horizontal_chunks[1];
 
     // --- Render Panes with Borders ---
     let active_tab = app_state.get_active_tab();
@@ -116,12 +105,6 @@ pub fn render_main_layout(frame: &mut Frame, app_state: &AppState) {
     let middle_pane_inner_area = middle_pane_block.inner(middle_pane_area);
     frame.render_widget(middle_pane_block, middle_pane_area);
     middle_pane::render_middle_pane(frame, middle_pane_inner_area, active_tab);
-
-    // Right Pane
-    let right_pane_block = Block::default().title("Preview").borders(Borders::ALL);
-    let right_pane_inner_area = right_pane_block.inner(right_pane_area);
-    frame.render_widget(right_pane_block, right_pane_area);
-    right_pane::render_right_pane(frame, right_pane_inner_area, active_tab);
 
     // --- Footer (Tasks, Info) ---
     let footer_chunks = Layout::default()
@@ -178,13 +161,6 @@ fn render_info_panel(frame: &mut Frame, area: Rect, app_state: &AppState) {
     let block = Block::default().borders(Borders::ALL).title("Info");
     let inner_area = block.inner(area);
 
-    let content = app_state.info_panel_content.lock().unwrap();
-    let text = if let Some(content) = content.as_ref() {
-        content.clone()
-    } else {
-        String::new()
-    };
-
     // Always display clipboard info
     let clipboard = &app_state.clipboard;
     let clipboard_info = if !clipboard.paths.is_empty() {
@@ -193,13 +169,12 @@ fn render_info_panel(frame: &mut Frame, area: Rect, app_state: &AppState) {
             Some(ClipboardMode::Move) => "Move",
             None => "None",
         };
-        format!("\n\nBuffer: {} files ({})", clipboard.paths.len(), mode)
+        format!("Buffer: {} files ({})", clipboard.paths.len(), mode)
     } else {
-        "\n\nBuffer: Empty".to_string()
+        "Buffer: Empty".to_string()
     };
 
-    let final_text = format!("{}{}", text, clipboard_info);
-    let paragraph = Paragraph::new(final_text)
+    let paragraph = Paragraph::new(clipboard_info)
         .wrap(Wrap { trim: true });
 
     frame.render_widget(paragraph, inner_area);

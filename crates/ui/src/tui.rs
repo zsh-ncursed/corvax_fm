@@ -3,7 +3,7 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
 };
-use ratatui::prelude::{CrosstermBackend, Terminal, Rect, Layout, Direction, Constraint};
+use ratatui::prelude::{CrosstermBackend, Terminal};
 use std::io::{self, stdout, Stdout};
 use rtfm_core::app_state::{AppState, InputMode, CreateFileType};
 
@@ -27,41 +27,6 @@ impl Tui {
         disable_raw_mode()?;
         stdout().execute(LeaveAlternateScreen)?;
         Ok(())
-    }
-
-    pub fn get_right_pane_area(&self, app_state: &AppState) -> Rect {
-        let frame_size = self.terminal.size().unwrap_or_default();
-        let top_bar_height = if app_state.show_tabs { 2 } else { 0 };
-        let main_chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(top_bar_height),
-                Constraint::Min(0),
-                Constraint::Length(6),
-            ])
-            .split(frame_size);
-
-        let main_area = main_chunks[1];
-
-        let main_horizontal_chunks = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Percentage(20),
-                Constraint::Percentage(80),
-            ])
-            .split(main_area);
-
-        let middle_right_area = main_horizontal_chunks[1];
-
-        let middle_right_chunks = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Percentage(55),
-                Constraint::Percentage(45),
-            ])
-            .split(middle_right_area);
-
-        middle_right_chunks[1] // This is the right_pane_area
     }
 }
 
@@ -169,7 +134,6 @@ pub fn handle_key_press(key: KeyEvent, app_state: &mut AppState) -> bool {
                     return true;
                 }
                 KeyCode::Char('q') => return false, // Signal to quit
-                KeyCode::Char('i') => app_state.update_info_panel(),
                 KeyCode::Tab => app_state.cycle_focus(),
                 KeyCode::Char('.') => app_state.toggle_hidden_files(),
                 KeyCode::Char('j') | KeyCode::Down => {
@@ -177,11 +141,9 @@ pub fn handle_key_press(key: KeyEvent, app_state: &mut AppState) -> bool {
                         FocusBlock::Middle => {
                             let show_hidden = app_state.show_hidden_files;
                             app_state.get_active_tab_mut().move_cursor_down(show_hidden);
-                            app_state.clear_info_panel();
                         },
                         _ => {
                             app_state.move_left_pane_cursor_down();
-                            app_state.clear_info_panel();
                         }
                     }
                 },
@@ -190,11 +152,9 @@ pub fn handle_key_press(key: KeyEvent, app_state: &mut AppState) -> bool {
                         FocusBlock::Middle => {
                             let show_hidden = app_state.show_hidden_files;
                             app_state.get_active_tab_mut().move_cursor_up(show_hidden);
-                            app_state.clear_info_panel();
                         },
                         _ => {
                             app_state.move_left_pane_cursor_up();
-                            app_state.clear_info_panel();
                         }
                     }
                 },
@@ -202,14 +162,12 @@ pub fn handle_key_press(key: KeyEvent, app_state: &mut AppState) -> bool {
                     if app_state.focus == FocusBlock::Middle {
                         let show_hidden = app_state.show_hidden_files;
                         app_state.get_active_tab_mut().leave_directory(show_hidden);
-                        app_state.clear_info_panel();
                     }
                 },
                 KeyCode::Char('l') | KeyCode::Right | KeyCode::Enter => {
                     if app_state.focus == FocusBlock::Middle {
                         let show_hidden = app_state.show_hidden_files;
                         app_state.get_active_tab_mut().enter_directory(show_hidden);
-                        app_state.clear_info_panel();
                     }
                 },
                 KeyCode::Char('y') => app_state.yank_selection(),

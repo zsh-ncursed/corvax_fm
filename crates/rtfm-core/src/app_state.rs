@@ -2,12 +2,9 @@ use std::fs;
 use std::path::PathBuf;
 use crate::task_manager::{TaskManager, TaskKind};
 use crate::clipboard::{Clipboard, ClipboardMode};
-use crate::preview::PreviewState;
-use std::sync::{Arc, Mutex};
 use directories::UserDirs;
 use config::Config;
 use log;
-use crate::plugin_manager::PluginManager;
 #[cfg(feature = "mounts")]
 use proc_mounts::MountIter;
 
@@ -43,7 +40,6 @@ pub struct TabState {
     pub current_dir: PathBuf,
     pub entries: Vec<DirEntry>,
     pub cursor: usize,
-    pub preview_state: Arc<Mutex<PreviewState>>,
 }
 
 impl TabState {
@@ -53,7 +49,6 @@ impl TabState {
             current_dir: std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/")),
             entries: Vec::new(),
             cursor: 0,
-            preview_state: Arc::new(Mutex::new(PreviewState::default())),
         }
     }
 
@@ -87,21 +82,18 @@ impl TabState {
         };
         self.entries.sort_by(|a, b| b.is_dir.cmp(&a.is_dir).then_with(|| a.name.cmp(&b.name)));
         self.cursor = 0;
-        self.update_preview(show_hidden);
     }
 
-    pub fn move_cursor_down(&mut self, show_hidden: bool) {
+    pub fn move_cursor_down(&mut self, _show_hidden: bool) {
         let max = self.entries.len().saturating_sub(1);
         if self.cursor < max {
             self.cursor += 1;
-            self.update_preview(show_hidden);
         }
     }
 
-    pub fn move_cursor_up(&mut self, show_hidden: bool) {
+    pub fn move_cursor_up(&mut self, _show_hidden: bool) {
         if self.cursor > 0 {
             self.cursor -= 1;
-            self.update_preview(show_hidden);
         }
     }
 
@@ -123,12 +115,6 @@ impl TabState {
 
     pub fn get_selected_entry_path(&self) -> Option<PathBuf> {
         self.entries.get(self.cursor).map(|e| e.path.clone())
-    }
-
-    pub fn update_preview(&self, _show_hidden: bool) {
-        // This method is now a no-op. Preview is handled by the PreviewController.
-        // We could set the state to Loading here, but it's better to do it
-        // right before we send the request to the controller.
     }
 }
 
@@ -152,8 +138,6 @@ pub struct AppState {
     #[cfg(feature = "mounts")]
     pub disks_cursor: usize,
     pub config: Config,
-    pub plugin_manager: PluginManager,
-    pub info_panel_content: Arc<Mutex<Option<String>>>,
     pub show_confirmation: bool,
     pub confirmation_message: String,
     pub path_to_delete: Option<PathBuf>,
@@ -219,13 +203,11 @@ impl AppState {
             xdg_cursor: 0,
             bookmarks,
             bookmarks_cursor: 0,
-            plugin_manager: PluginManager::new(),
             #[cfg(feature = "mounts")]
             mounts,
             #[cfg(feature = "mounts")]
             disks_cursor: 0,
             config,
-            info_panel_content: Arc::new(Mutex::new(None)),
             show_confirmation: false,
             confirmation_message: String::new(),
             path_to_delete: None,
@@ -416,39 +398,6 @@ impl AppState {
             if let Err(e) = config::save_config(&self.config) {
                 log::error!("Failed to save config: {}", e);
             }
-        }
-    }
-
-    pub fn clear_info_panel(&mut self) {
-        *self.info_panel_content.lock().unwrap() = None;
-    }
-
-    pub fn update_info_panel(&mut self) {
-        if let Some(path) = self.get_active_tab().get_selected_entry_path() {
-            let info_panel_content_clone = Arc::clone(&self.info_panel_content);
-            *info_panel_content_clone.lock().unwrap() = Some("Calculating...".to_string());
-
-            tokio::spawn(async move {
-                let mut info_text = vec![];
-                if let Ok(metadata) = fs::metadata(&path) {
-                    if let Ok(created) = metadata.created() {
-                        let datetime: chrono::DateTime<chrono::Local> = created.into();
-                        info_text.push(format!("Created: {}", datetime.format("%Y-%m-%d %H:%M:%S")));
-                    }
-
-                    let size = if metadata.is_dir() {
-                        fs_extra::dir::get_size(&path).unwrap_or(0)
-                    } else {
-                        metadata.len()
-                    };
-                    info_text.push(format!("Size: {} bytes", size));
-
-                    let final_info = info_text.join("\n");
-                    *info_panel_content_clone.lock().unwrap() = Some(final_info);
-                } else {
-                    *info_panel_content_clone.lock().unwrap() = Some("Failed to get info".to_string());
-                }
-            });
         }
     }
 

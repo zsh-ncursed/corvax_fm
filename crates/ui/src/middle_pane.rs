@@ -1,4 +1,3 @@
-use crate::right_pane;
 use ratatui::{
     prelude::{Color, Rect, Style},
     widgets::{List, ListItem, ListState},
@@ -18,8 +17,7 @@ pub fn render_middle_pane(frame: &mut Frame, area: Rect, tab_state: &TabState) {
                 Style::default()
             };
 
-            let icon = right_pane::get_icon_for_path(&entry.path, entry.is_dir);
-            let mut name = format!("{} {}", icon, entry.name.clone());
+            let mut name = entry.name.clone();
             if entry.is_dir {
                 name.push('/');
             }
