@@ -1,4 +1,4 @@
-use crate::{left_pane, middle_pane, top_bar};
+use crate::{left_pane, middle_pane, top_bar, right_pane};
 use ratatui::{
     prelude::{Constraint, Direction, Layout, Rect},
     style::{Color, Style},
@@ -77,17 +77,19 @@ pub fn render_main_layout(frame: &mut Frame, app_state: &AppState) {
     // --- Top Bar (Tabs) ---
     top_bar::render_top_bar(frame, top_bar_area, app_state);
 
-    // --- Main Area (Left, Middle) ---
+    // --- Main Area (Left, Middle, Right) ---
     let main_horizontal_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
             Constraint::Percentage(20), // Left
-            Constraint::Percentage(80), // Middle
+            Constraint::Percentage(40), // Middle
+            Constraint::Percentage(40), // Right
         ])
         .split(main_area);
 
     let left_pane_area = main_horizontal_chunks[0];
     let middle_pane_area = main_horizontal_chunks[1];
+    let right_pane_area = main_horizontal_chunks[2];
 
     // --- Render Panes with Borders ---
     let active_tab = app_state.get_active_tab();
@@ -105,6 +107,9 @@ pub fn render_main_layout(frame: &mut Frame, app_state: &AppState) {
     let middle_pane_inner_area = middle_pane_block.inner(middle_pane_area);
     frame.render_widget(middle_pane_block, middle_pane_area);
     middle_pane::render_middle_pane(frame, middle_pane_inner_area, active_tab);
+
+    // Right Pane
+    right_pane::render_right_pane(frame, right_pane_area, active_tab);
 
     // --- Footer (Tasks, Info) ---
     let footer_chunks = Layout::default()

@@ -1,6 +1,8 @@
 use std::fs;
+use std::io::Read;
 use std::path::PathBuf;
 use crate::task_manager::{TaskManager, TaskKind};
+use humansize::{format_size, BINARY};
 use crate::clipboard::{Clipboard, ClipboardMode};
 use directories::UserDirs;
 use config::Config;
@@ -40,6 +42,8 @@ pub struct TabState {
     pub current_dir: PathBuf,
     pub entries: Vec<DirEntry>,
     pub cursor: usize,
+    pub preview_content: Option<String>,
+    pub preview_scroll: (u16, u16),
 }
 
 impl TabState {
@@ -49,6 +53,8 @@ impl TabState {
             current_dir: std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/")),
             entries: Vec::new(),
             cursor: 0,
+            preview_content: None,
+            preview_scroll: (0, 0),
         }
     }
 
@@ -82,6 +88,7 @@ impl TabState {
         };
         self.entries.sort_by(|a, b| b.is_dir.cmp(&a.is_dir).then_with(|| a.name.cmp(&b.name)));
         self.cursor = 0;
+        self.update_preview();
     }
 
     pub fn move_cursor_down(&mut self, _show_hidden: bool) {
@@ -89,12 +96,14 @@ impl TabState {
         if self.cursor < max {
             self.cursor += 1;
         }
+        self.update_preview();
     }
 
     pub fn move_cursor_up(&mut self, _show_hidden: bool) {
         if self.cursor > 0 {
             self.cursor -= 1;
         }
+        self.update_preview();
     }
 
     pub fn enter_directory(&mut self, show_hidden: bool) {
@@ -104,12 +113,69 @@ impl TabState {
                 self.update_entries(show_hidden);
             }
         }
+        self.update_preview();
     }
 
     pub fn leave_directory(&mut self, show_hidden: bool) {
         if let Some(parent) = self.current_dir.parent() {
             self.current_dir = parent.to_path_buf();
             self.update_entries(show_hidden);
+        }
+        self.update_preview();
+    }
+
+    pub fn update_preview(&mut self) {
+        self.preview_scroll = (0, 0);
+        let Some(selected_entry) = self.entries.get(self.cursor) else {
+            self.preview_content = None;
+            return;
+        };
+
+        if selected_entry.is_dir {
+            let entries = match fs::read_dir(&selected_entry.path) {
+                Ok(entries) => {
+                    let mut names = entries
+                        .filter_map(|res| res.ok())
+                        .map(|entry| {
+                            let mut name = entry.file_name().to_string_lossy().to_string();
+                            if entry.path().is_dir() {
+                                name.push('/');
+                            }
+                            name
+                        })
+                        .collect::<Vec<_>>();
+                    names.sort();
+                    names.join("\n")
+                }
+                Err(e) => format!("Error reading directory:\n{}", e),
+            };
+            self.preview_content = Some(entries);
+        } else {
+            const MAX_PREVIEW_SIZE: u64 = 1024 * 1024; // 1MB
+            let file_content = match fs::File::open(&selected_entry.path) {
+                Ok(mut file) => {
+                    let metadata = file.metadata().ok();
+                    let file_size = metadata.as_ref().map_or(0, |m| m.len());
+
+                    if file_size > MAX_PREVIEW_SIZE {
+                        format!(
+                            "File is too large to preview ({} > 1MB)",
+                            format_size(file_size, BINARY)
+                        )
+                    } else {
+                        let mut buffer = Vec::new();
+                        match file.read_to_end(&mut buffer) {
+                            Ok(_) => match String::from_utf8(buffer) {
+                                Ok(s) => s,
+                                Err(_) => "[Binary File]".to_string(),
+                            },
+                            Err(e) => format!("Error reading file:\n{}", e),
+                        }
+                    }
+                }
+                Err(e) => format!("Error opening file:\n{}", e),
+            };
+            self.preview_content = Some(file_content);
         }
     }
 
@@ -299,7 +365,9 @@ impl AppState {
 
         if let Some(path) = path {
             let show_hidden = self.show_hidden_files;
-            self.get_active_tab_mut().set_current_dir(path, show_hidden);
+            let active_tab = self.get_active_tab_mut();
+            active_tab.set_current_dir(path, show_hidden);
+            active_tab.update_preview();
         }
     }
 
