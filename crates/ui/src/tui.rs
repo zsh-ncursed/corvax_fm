@@ -52,6 +52,16 @@ pub fn handle_key_press(key: KeyEvent, app_state: &mut AppState) -> bool {
                 app_state.toggle_terminal();
                 return true;
             }
+            KeyCode::Char('j') => {
+                let active_tab = app_state.get_active_tab_mut();
+                active_tab.preview_scroll.0 = active_tab.preview_scroll.0.saturating_add(1);
+                return true;
+            }
+            KeyCode::Char('k') => {
+                let active_tab = app_state.get_active_tab_mut();
+                active_tab.preview_scroll.0 = active_tab.preview_scroll.0.saturating_sub(1);
+                return true;
+            }
             _ => {}
         }
     }
