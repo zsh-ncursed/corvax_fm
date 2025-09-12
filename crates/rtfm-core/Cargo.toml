@@ -4,8 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-mupdf-ffi = { path = "../mupdf-ffi" }
-raster = { path = "../raster" }
 tokio = { workspace = true }
 log = { workspace = true }
 uuid = { workspace = true }

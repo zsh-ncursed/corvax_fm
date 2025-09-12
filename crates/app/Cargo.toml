@@ -9,8 +9,6 @@ ui = { path = "../ui", features = ["mounts"] }
 io = { path = "../io" }
 config = { path = "../config" }
 utils = { path = "../utils" }
-output-backends = { path = "../output-backends" }
-raster = { path = "../raster" }
 
 tokio = { workspace = true }
 crossterm = { workspace = true }
