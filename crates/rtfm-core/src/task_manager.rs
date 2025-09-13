@@ -44,7 +44,7 @@ use std::fmt;
 
 pub struct TaskManager {
     tasks: Arc<Mutex<Vec<Task>>>,
-    progress_rx: Mutex<mpsc::Receiver<(Uuid, fs_ops::ProgressEvent)>>,
+    progress_rx: mpsc::Receiver<(Uuid, fs_ops::ProgressEvent)>,
     progress_tx: mpsc::Sender<(Uuid, fs_ops::ProgressEvent)>,
 }
 
@@ -61,7 +61,7 @@ impl TaskManager {
         let (tx, rx) = mpsc::channel(100);
         Self {
             tasks: Arc::new(Mutex::new(Vec::new())),
-            progress_rx: Mutex::new(rx),
+            progress_rx: rx,
             progress_tx: tx,
         }
     }
@@ -108,26 +108,21 @@ impl TaskManager {
         }
     }
 
-    pub fn update_task_statuses(&self) -> bool {
-        let mut completed_or_failed = false;
-        let mut rx = self.progress_rx.lock().unwrap();
-        while let Ok((task_id, event)) = rx.try_recv() {
+    pub async fn wait_for_event(&mut self) {
+        if let Some((task_id, event)) = self.progress_rx.recv().await {
             let mut tasks = self.tasks.lock().unwrap();
             if let Some(task) = tasks.iter_mut().find(|t| t.id == task_id) {
                 match event {
                     fs_ops::ProgressEvent::Completed => {
                         task.status = TaskStatus::Completed;
-                        completed_or_failed = true;
                     }
                     fs_ops::ProgressEvent::Error(e) => {
                         task.status = TaskStatus::Failed(e);
-                        completed_or_failed = true;
                     }
                     fs_ops::ProgressEvent::Update(p) => task.status = TaskStatus::InProgress(p),
                 }
             }
         }
-        completed_or_failed
     }
 }
 
