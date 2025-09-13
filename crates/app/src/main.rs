@@ -68,9 +68,11 @@ impl App {
                         break 'main;
                     }
                 }
-                _ = self.app_state.task_manager.wait_for_event() => {
-                    let show_hidden = self.app_state.show_hidden_files;
-                    self.app_state.get_active_tab_mut().update_entries(show_hidden);
+                task_completed = self.app_state.task_manager.wait_for_event() => {
+                    if task_completed {
+                        let show_hidden = self.app_state.show_hidden_files;
+                        self.app_state.get_active_tab_mut().update_entries(show_hidden);
+                    }
                 }
             }
         }
