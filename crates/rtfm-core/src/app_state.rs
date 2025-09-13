@@ -471,9 +471,21 @@ impl AppState {
 
     pub fn delete_selection(&mut self) {
         if let Some(path) = self.get_active_tab().get_selected_entry_path() {
-            self.path_to_delete = Some(path.clone());
-            self.confirmation_message = format!("Are you sure you want to delete {:?}? (y/n)", path.file_name().unwrap());
-            self.show_confirmation = true;
+            let is_dir = path.is_dir();
+            let is_empty = if is_dir {
+                fs::read_dir(&path).map(|mut dir| dir.next().is_none()).unwrap_or(false)
+            } else {
+                false
+            };
+
+            if is_dir && is_empty {
+                self.path_to_delete = Some(path);
+                self.confirm_delete();
+            } else {
+                self.path_to_delete = Some(path.clone());
+                self.confirmation_message = format!("Are you sure you want to delete {:?}? (y/n)", path.file_name().unwrap());
+                self.show_confirmation = true;
+            }
         }
     }
 

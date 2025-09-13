@@ -39,24 +39,31 @@ impl App {
         self.tui.enter()?;
         let mut event_stream = EventStream::new();
 
-        loop {
+        'main: loop {
             self.app_state.task_manager.process_pending_tasks();
-            if self.app_state.task_manager.update_task_statuses() {
-                let show_hidden = self.app_state.show_hidden_files;
-                self.app_state.get_active_tab_mut().update_entries(show_hidden);
-            }
 
             self.tui.terminal.draw(|frame| {
                 ui::layout::render_main_layout(frame, &self.app_state);
             })?;
 
-            if let Some(Ok(event)) = event_stream.next().await {
-                if let Event::Key(key) = event {
-                    if key.kind == KeyEventKind::Press {
-                        if !tui::handle_key_press(key, &mut self.app_state) {
-                            break; // Quit
+            tokio::select! {
+                biased;
+                maybe_event = event_stream.next() => {
+                    if let Some(Ok(event)) = maybe_event {
+                        if let Event::Key(key) = event {
+                            if key.kind == KeyEventKind::Press {
+                                if !tui::handle_key_press(key, &mut self.app_state) {
+                                    break 'main;
+                                }
+                            }
                         }
+                    } else {
+                        break 'main;
                     }
+                }
+                _ = self.app_state.task_manager.wait_for_event() => {
+                    let show_hidden = self.app_state.show_hidden_files;
+                    self.app_state.get_active_tab_mut().update_entries(show_hidden);
                 }
             }
         }
