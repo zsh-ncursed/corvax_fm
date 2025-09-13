@@ -8,21 +8,35 @@ use ratatui::{
 use rtfm_core::app_state::{AppState, CreateFileType};
 use rtfm_core::clipboard::ClipboardMode;
 
+use rtfm_core::app_state::InputMode;
+
 fn render_input_dialog(frame: &mut Frame, app_state: &AppState) {
-    let file_type = match app_state.create_file_type {
-        Some(CreateFileType::File) => "file",
-        Some(CreateFileType::Directory) => "directory",
-        None => "",
+    let title = match app_state.input_mode {
+        InputMode::Create => {
+            let file_type = match app_state.create_file_type {
+                Some(CreateFileType::File) => "file",
+                Some(CreateFileType::Directory) => "directory",
+                None => "",
+            };
+            format!("Create new {}", file_type)
+        }
+        InputMode::Rename => "Rename".to_string(),
+        _ => "Input".to_string(),
     };
-    let title = format!("Create new {}", file_type);
-    let text = Paragraph::new(app_state.input_buffer.as_str())
+
+    let mut text = app_state.input_buffer.clone();
+    if let Some(error) = &app_state.input_dialog_error {
+        text.push_str(&format!("\n\n{}", error));
+    }
+
+    let paragraph = Paragraph::new(text)
         .block(Block::default().title(title).borders(Borders::ALL))
         .style(Style::default().fg(Color::Yellow));
 
     // Center the dialog
     let area = centered_rect(50, 20, frame.size());
     frame.render_widget(Clear, area); //this clears the background
-    frame.render_widget(text, area);
+    frame.render_widget(paragraph, area);
 }
 
 fn render_confirmation_dialog(frame: &mut Frame, app_state: &AppState) {
@@ -166,6 +180,8 @@ fn render_info_panel(frame: &mut Frame, area: Rect, app_state: &AppState) {
     let block = Block::default().borders(Borders::ALL).title("Info");
     let inner_area = block.inner(area);
 
+    let mut info_text = String::new();
+
     // Always display clipboard info
     let clipboard = &app_state.clipboard;
     let clipboard_info = if !clipboard.paths.is_empty() {
@@ -178,8 +194,16 @@ fn render_info_panel(frame: &mut Frame, area: Rect, app_state: &AppState) {
     } else {
         "Buffer: Empty".to_string()
     };
+    info_text.push_str(&clipboard_info);
 
-    let paragraph = Paragraph::new(clipboard_info)
+    // Display notification if there is one
+    if let Some(notification) = &app_state.notification {
+        info_text.push_str("\n\n");
+        info_text.push_str(notification);
+    }
+
+
+    let paragraph = Paragraph::new(info_text)
         .wrap(Wrap { trim: true });
 
     frame.render_widget(paragraph, inner_area);

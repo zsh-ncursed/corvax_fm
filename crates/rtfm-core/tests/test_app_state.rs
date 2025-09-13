@@ -29,6 +29,11 @@ async fn test_clipboard_yank_and_paste() {
     assert_eq!(app_state.clipboard.paths[0], file_path);
     assert_eq!(app_state.clipboard.mode, Some(ClipboardMode::Copy));
 
+    // Create a subdirectory and paste there to avoid conflict
+    let sub_dir = tmp_dir.path().join("sub");
+    fs::create_dir(&sub_dir).unwrap();
+    app_state.get_active_tab_mut().current_dir = sub_dir.clone();
+
     // "Paste" it
     app_state.paste();
     let tasks = app_state.task_manager.get_tasks();
@@ -36,7 +41,7 @@ async fn test_clipboard_yank_and_paste() {
     match &tasks[0].kind {
         TaskKind::Copy { src, dest } => {
             assert_eq!(src, &file_path);
-            assert_eq!(dest, &tmp_dir.path().join("file.txt"));
+            assert_eq!(dest, &sub_dir.join("file.txt"));
         }
         _ => panic!("Wrong task kind"),
     }
