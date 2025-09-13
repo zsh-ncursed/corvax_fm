@@ -42,6 +42,13 @@ impl App {
         'main: loop {
             self.app_state.task_manager.process_pending_tasks();
 
+            if let Some(timer) = self.app_state.notification_timer {
+                if timer.elapsed().as_secs() > 3 {
+                    self.app_state.notification = None;
+                    self.app_state.notification_timer = None;
+                }
+            }
+
             self.tui.terminal.draw(|frame| {
                 ui::layout::render_main_layout(frame, &self.app_state);
             })?;

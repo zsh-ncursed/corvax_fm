@@ -99,11 +99,11 @@ pub fn handle_key_press(key: KeyEvent, app_state: &mut AppState) -> bool {
     if app_state.show_confirmation {
         match key.code {
             KeyCode::Char('y') => {
-                app_state.confirm_delete();
+                app_state.confirm();
                 return true;
             }
             KeyCode::Char('n') | KeyCode::Esc => {
-                app_state.cancel_delete();
+                app_state.cancel();
                 return true;
             }
             _ => {}
@@ -121,13 +121,18 @@ pub fn handle_key_press(key: KeyEvent, app_state: &mut AppState) -> bool {
                 return true;
             }
             KeyCode::Enter => {
-                app_state.create_item();
+                if app_state.input_mode == InputMode::Rename {
+                    app_state.rename_item();
+                } else {
+                    app_state.create_item();
+                }
                 app_state.show_input_dialog = false;
                 return true;
             }
             KeyCode::Esc => {
                 app_state.show_input_dialog = false;
                 app_state.input_buffer.clear();
+                app_state.input_mode = InputMode::Normal;
                 return true;
             }
             _ => {}
@@ -185,6 +190,7 @@ pub fn handle_key_press(key: KeyEvent, app_state: &mut AppState) -> bool {
                 KeyCode::Char('d') => app_state.delete_selection(),
                 KeyCode::Char('p') => app_state.paste(),
                 KeyCode::Char('m') => app_state.add_bookmark(),
+                KeyCode::Char('r') => app_state.rename_selection(),
                 _ => {}
             }
         },
@@ -193,18 +199,23 @@ pub fn handle_key_press(key: KeyEvent, app_state: &mut AppState) -> bool {
                 app_state.create_file_type = Some(CreateFileType::File);
                 app_state.show_input_dialog = true;
                 app_state.input_mode = InputMode::Normal;
+                app_state.input_dialog_error = None;
                 return true;
             }
             KeyCode::Char('d') => {
                 app_state.create_file_type = Some(CreateFileType::Directory);
                 app_state.show_input_dialog = true;
                 app_state.input_mode = InputMode::Normal;
+                app_state.input_dialog_error = None;
                 return true;
             }
             _ => {
                 app_state.input_mode = InputMode::Normal;
                 return true;
             }
+        },
+        InputMode::Rename => {
+            // Handled by the `show_input_dialog` block
         }
     }
     true

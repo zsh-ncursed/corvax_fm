@@ -22,6 +22,7 @@ pub enum FocusBlock {
 pub enum InputMode {
     Normal,
     Create,
+    Rename,
 }
 
 #[derive(Debug, Clone)]
@@ -207,10 +208,22 @@ pub struct AppState {
     pub show_confirmation: bool,
     pub confirmation_message: String,
     pub path_to_delete: Option<PathBuf>,
+    pub action_to_confirm: Option<ActionToConfirm>,
     pub input_mode: InputMode,
     pub input_buffer: String,
     pub show_input_dialog: bool,
     pub create_file_type: Option<CreateFileType>,
+    pub path_to_rename: Option<PathBuf>,
+    pub pending_paste: Option<(Clipboard, PathBuf)>,
+    pub notification: Option<String>,
+    pub notification_timer: Option<std::time::Instant>,
+    pub input_dialog_error: Option<String>,
+}
+
+#[derive(Debug)]
+pub enum ActionToConfirm {
+    Delete,
+    Paste,
 }
 
 impl AppState {
@@ -277,10 +290,16 @@ impl AppState {
             show_confirmation: false,
             confirmation_message: String::new(),
             path_to_delete: None,
+            action_to_confirm: None,
             input_mode: InputMode::Normal,
             input_buffer: String::new(),
             show_input_dialog: false,
             create_file_type: None,
+            path_to_rename: None,
+            pending_paste: None,
+            notification: None,
+            notification_timer: None,
+            input_dialog_error: None,
         }
     }
 
@@ -398,9 +417,24 @@ impl AppState {
         }
 
         let destination = self.get_active_tab().current_dir.clone();
-        let mode = self.clipboard.mode.clone().unwrap();
+        let conflict = self.clipboard.paths.iter().any(|src_path| {
+            let dest_path = destination.join(src_path.file_name().unwrap());
+            dest_path.exists()
+        });
 
-        for src_path in &self.clipboard.paths {
+        if conflict {
+            self.confirmation_message = "A file with the same name already exists. Overwrite? (y/n)".to_string();
+            self.show_confirmation = true;
+            self.action_to_confirm = Some(ActionToConfirm::Paste);
+            self.pending_paste = Some((self.clipboard.clone(), destination));
+        } else {
+            self.execute_paste(self.clipboard.clone(), destination);
+        }
+    }
+
+    fn execute_paste(&mut self, clipboard: Clipboard, destination: PathBuf) {
+        let mode = clipboard.mode.clone().unwrap();
+        for src_path in &clipboard.paths {
             let dest_path = destination.join(src_path.file_name().unwrap());
             let description = format!("{:?} {:?} -> {:?}", mode, src_path.file_name().unwrap(), destination);
             let task_kind = match mode {
@@ -413,6 +447,20 @@ impl AppState {
         if mode == ClipboardMode::Move {
             self.clipboard.clear();
         }
+    }
+
+    pub fn confirm_paste(&mut self) {
+        if let Some((clipboard, destination)) = self.pending_paste.take() {
+            self.execute_paste(clipboard, destination);
+        }
+        self.show_confirmation = false;
+        self.action_to_confirm = None;
+    }
+
+    pub fn cancel_paste(&mut self) {
+        self.pending_paste = None;
+        self.show_confirmation = false;
+        self.action_to_confirm = None;
     }
 
     pub fn next_tab(&mut self) {
@@ -471,37 +519,36 @@ impl AppState {
 
     pub fn delete_selection(&mut self) {
         if let Some(path) = self.get_active_tab().get_selected_entry_path() {
-            let is_dir = path.is_dir();
-            let is_empty = if is_dir {
-                fs::read_dir(&path).map(|mut dir| dir.next().is_none()).unwrap_or(false)
-            } else {
-                false
-            };
-
-            if is_dir && is_empty {
-                self.path_to_delete = Some(path);
-                self.confirm_delete();
-            } else {
-                self.path_to_delete = Some(path.clone());
-                self.confirmation_message = format!("Are you sure you want to delete {:?}? (y/n)", path.file_name().unwrap());
-                self.show_confirmation = true;
-            }
+            self.path_to_delete = Some(path.clone());
+            self.confirmation_message = format!("Are you sure you want to delete {:?}? (y/n)", path.file_name().unwrap());
+            self.show_confirmation = true;
+            self.action_to_confirm = Some(ActionToConfirm::Delete);
         }
     }
 
-    pub fn confirm_delete(&mut self) {
+    fn confirm_delete(&mut self) {
         if let Some(path) = self.path_to_delete.take() {
             let description = format!("Delete {:?}", path.file_name().unwrap());
             let task_kind = TaskKind::Delete { path };
             self.task_manager.add_task(task_kind, description);
         }
-        self.show_confirmation = false;
-        self.path_to_delete = None;
     }
 
-    pub fn cancel_delete(&mut self) {
+    pub fn confirm(&mut self) {
+        if let Some(action) = self.action_to_confirm.take() {
+            match action {
+                ActionToConfirm::Delete => self.confirm_delete(),
+                ActionToConfirm::Paste => self.confirm_paste(),
+            }
+        }
         self.show_confirmation = false;
+    }
+
+    pub fn cancel(&mut self) {
+        self.show_confirmation = false;
+        self.action_to_confirm = None;
         self.path_to_delete = None;
+        self.pending_paste = None;
     }
 
     pub fn create_item(&mut self) {
@@ -513,7 +560,14 @@ impl AppState {
         self.input_buffer.clear();
 
         let current_dir = self.get_active_tab().current_dir.clone();
-        let new_item_path = current_dir.join(new_item_name);
+        let new_item_path = current_dir.join(&new_item_name);
+
+        if new_item_path.exists() {
+            self.input_dialog_error = Some("A file with this name already exists.".to_string());
+            self.show_input_dialog = true;
+            self.input_buffer = new_item_name;
+            return;
+        }
 
         let task_kind = match self.create_file_type.as_ref().unwrap() {
             CreateFileType::File => TaskKind::CreateFile {
@@ -528,5 +582,45 @@ impl AppState {
         self.task_manager.add_task(task_kind, description);
 
         self.create_file_type = None;
+    }
+
+    pub fn rename_selection(&mut self) {
+        if let Some(path) = self.get_active_tab().get_selected_entry_path() {
+            self.path_to_rename = Some(path.clone());
+            self.input_buffer = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+            self.input_mode = InputMode::Rename;
+            self.show_input_dialog = true;
+            self.input_dialog_error = None;
+        }
+    }
+
+    pub fn rename_item(&mut self) {
+        if let Some(path_to_rename) = self.path_to_rename.clone() {
+            let new_name = self.input_buffer.clone();
+            if new_name.is_empty() {
+                self.input_mode = InputMode::Normal;
+                self.show_input_dialog = false;
+                self.input_buffer.clear();
+                self.path_to_rename = None;
+                return;
+            }
+            let new_path = path_to_rename.with_file_name(&new_name);
+            if new_path.exists() {
+                self.input_dialog_error = Some("A file with this name already exists.".to_string());
+                self.show_input_dialog = true;
+                return;
+            }
+
+            self.path_to_rename = None;
+            self.input_buffer.clear();
+
+            let description = format!("Rename {:?} to {:?}", path_to_rename, new_path);
+            let task_kind = TaskKind::Move {
+                src: path_to_rename,
+                dest: new_path,
+            };
+            self.task_manager.add_task(task_kind, description);
+        }
+        self.input_mode = InputMode::Normal;
     }
 }

@@ -5,6 +5,28 @@ use ratatui::{
 };
 use rtfm_core::app_state::TabState;
 
+fn get_icon_for_file(name: &str, is_dir: bool) -> &'static str {
+    if is_dir {
+        return ""; // Folder icon
+    }
+    match name.split('.').last() {
+        Some("rs") => "",   // Rust
+        Some("js") => "",   // JavaScript
+        Some("html") => "", // HTML
+        Some("css") => "",  // CSS
+        Some("json") => "", // JSON
+        Some("md") => "",   // Markdown
+        Some("toml") => "", // TOML
+        Some("lock") => "", // Lock
+        Some("git") | Some("gitignore") => "", // Git
+        Some("zip") | Some("rar") | Some("7z") => "", // Archive
+        Some("png") | Some("jpg") | Some("jpeg") | Some("gif") => "", // Image
+        Some("pdf") => "",   // PDF
+        Some("txt") => "",   // Text file
+        _ => "",           // Default file
+    }
+}
+
 pub fn render_middle_pane(frame: &mut Frame, area: Rect, tab_state: &TabState) {
     let items: Vec<ListItem> = tab_state
         .entries
@@ -12,12 +34,13 @@ pub fn render_middle_pane(frame: &mut Frame, area: Rect, tab_state: &TabState) {
         .map(|entry| {
             let is_hidden = entry.name.starts_with('.');
             let style = if is_hidden {
-                Style::default().fg(Color::DarkGray)
+                Style::default().fg(Color::Gray)
             } else {
                 Style::default()
             };
 
-            let mut name = entry.name.clone();
+            let icon = get_icon_for_file(&entry.name, entry.is_dir);
+            let mut name = format!("{} {}", icon, entry.name);
             if entry.is_dir {
                 name.push('/');
             }
@@ -25,7 +48,7 @@ pub fn render_middle_pane(frame: &mut Frame, area: Rect, tab_state: &TabState) {
         })
         .collect();
 
-    let list = List::new(items).highlight_symbol(">> ");
+    let list = List::new(items).highlight_style(Style::default().bg(Color::Rgb(50, 50, 80)));
 
     let mut list_state = ListState::default();
     list_state.select(Some(tab_state.cursor));

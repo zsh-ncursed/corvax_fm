@@ -60,7 +60,8 @@ cargo run --release
 
 ### File Operations
 *   `y`: Yank (copy) selected file/directory to clipboard
-*   `d`: Cut selected file/directory to clipboard
+*   `x`: Cut selected file/directory to clipboard
+*   `d`: Delete selected file/directory (with confirmation)
 *   `p`: Paste from clipboard (creates a copy/move task)
 *   `m`: Bookmark the current directory
 
