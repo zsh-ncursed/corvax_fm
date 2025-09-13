@@ -108,21 +108,25 @@ impl TaskManager {
         }
     }
 
-    pub async fn wait_for_event(&mut self) {
+    pub async fn wait_for_event(&mut self) -> bool {
         if let Some((task_id, event)) = self.progress_rx.recv().await {
             let mut tasks = self.tasks.lock().unwrap();
             if let Some(task) = tasks.iter_mut().find(|t| t.id == task_id) {
                 match event {
                     fs_ops::ProgressEvent::Completed => {
                         task.status = TaskStatus::Completed;
+                        return true;
                     }
                     fs_ops::ProgressEvent::Error(e) => {
                         task.status = TaskStatus::Failed(e);
                     }
-                    fs_ops::ProgressEvent::Update(p) => task.status = TaskStatus::InProgress(p),
+                    fs_ops::ProgressEvent::Update(p) => {
+                        task.status = TaskStatus::InProgress(p)
+                    }
                 }
             }
         }
+        false
     }
 }
 

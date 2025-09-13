@@ -19,8 +19,12 @@ fn get_icon_for_file(name: &str, is_dir: bool) -> &'static str {
         Some("toml") => "", // TOML
         Some("lock") => "", // Lock
         Some("git") | Some("gitignore") => "", // Git
-        Some("zip") | Some("rar") | Some("7z") => "", // Archive
-        Some("png") | Some("jpg") | Some("jpeg") | Some("gif") => "", // Image
+        // Audio
+        Some("mp3") | Some("wav") | Some("flac") => "🎵",
+        // Video
+        Some("mp4") | Some("avi") | Some("mkv") | Some("mov") => "🎞",
+        Some("zip") | Some("rar") | Some("7z") | Some("tar") | Some("gz") => "", // Archive
+        Some("png") | Some("jpg") | Some("jpeg") | Some("gif") | Some("webp") | Some("ico") => "", // Image
         Some("pdf") => "",   // PDF
         Some("txt") => "",   // Text file
         _ => "",           // Default file
